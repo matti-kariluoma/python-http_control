@@ -29,7 +29,7 @@ def debug(*objs):
 	print('DEBUG: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
 
 class Server():
-	supported_types = [int, float, str, list]
+	supported_types = [bool, int, float, str, list]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
