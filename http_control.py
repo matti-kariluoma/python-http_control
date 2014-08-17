@@ -22,11 +22,52 @@ write to any of the registered state variables.
 '''
 from __future__ import print_function
 import sys, datetime
+if sys.version.startswith('3'):
+	from urllib.parse import parse_qs
+	from http.server import BaseHTTPRequestHandler, HTTPServer
+else:
+	from urlparse import parse_qs
+	from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import cgi
 __version__ = '0.0'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
 	print('DEBUG: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
+
+def info(*objs):
+	print('INFO: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
+
+class Handler(BaseHTTPRequestHandler):
+	def do_GET(self):
+		self.send_response(200)
+		self.send_header('Content-type', 'text/html')
+		self.end_headers()
+		self.wfile.write('''<html><body>
+		<form method='POST'>
+		<input type='text' name='hello'></input>
+		<input type='submit'></input>
+		</form>
+		</body></html>''')
+		 
+	def _parse_POST(self):
+		# thanks http://stackoverflow.com/a/13330449
+		ctype, pdict = cgi.parse_header(self.headers['content-type'])
+		if ctype == 'multipart/form-data':
+			post = cgi.parse_multipart(self.rfile, pdict)
+		elif ctype == 'application/x-www-form-urlencoded':
+			length = int(self.headers['content-length'])
+			post = parse_qs(self.rfile.read(length), keep_blank_values=1)
+		else:
+			post = {}
+		return post
+
+	def do_POST(self):
+		post = self._parse_POST()
+		self.send_response(200)
+		self.send_header('Content-type', 'text/html')
+		self.end_headers()
+		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
 
 class Server():
 	supported_types = [bool, int, long, float, complex, str, unicode, tuple, list, dict]
@@ -36,12 +77,21 @@ class Server():
  \t%s
 ''' % '\n\t'.join([str(t) for t in supported_types])
 	
-	def __init__(self):
-		pass
+	def __init__(self, host='0.0.0.0', port=8080):
+		self.host = host
+		self.port = port
+		self.isServing = True
+	
 	def start(self):
-		pass
+		self.httpd = HTTPServer((self.host, self.port), Handler)
+		info('Bound to ', (self.host, self.port))
+		while self.isServing:
+			self.httpd.handle_request()
+	
 	def stop(self):
-		pass
+		self.isServing = False
+		# TODO: trigger handle_request()
+		self.httpd.socket.close()
 	
 	def register(self, name, object_, type_=None):
 		'''
@@ -61,7 +111,6 @@ class Server():
 		pass
 	def get(self, name):
 		pass
-	
 
 def demo():
 	import time
@@ -71,6 +120,7 @@ def demo():
 	http_control_server = Server()
 	http_control_server.register('running', running, bool)
 	http_control_server.start()
+	debug('are we threaded?')
 	http_control_server.register('msg', msg, str)
 	while running:
 		time.sleep(0.1)
