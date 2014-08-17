@@ -21,7 +21,7 @@ write to any of the registered state variables.
 :license: MIT @see LICENSE
 '''
 from __future__ import print_function
-import sys, datetime
+import sys, datetime, threading
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
 	from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -97,6 +97,21 @@ class Handler(BaseHTTPRequestHandler):
 		self.end_headers()
 		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
 
+class _httpd_Thread(threading.Thread):
+	def __init__(self, *args, **kwargs):
+		self.host = kwargs.pop('host')
+		self.port = kwargs.pop('port')
+		self.handler = kwargs.pop('handler')
+		self.running = True
+		super(_httpd_Thread, self).__init__(*args, **kwargs)
+		self.httpd = HTTPServer((self.host, self.port), self.handler)
+		info('Bound to ', (self.host, self.port))
+		
+	def run(self):
+		while self.running:
+			self.httpd.handle_request()
+		self.httpd.socket.close()
+
 class Server():
 	def __init__(self, host='0.0.0.0', port=8080, request_handler=None):
 		'''
@@ -122,15 +137,12 @@ class Server():
 	
 	def start(self):
 		Handler._set_state(self.registry) # pass reference
-		self.httpd = HTTPServer((self.host, self.port), self.handler)
-		info('Bound to ', (self.host, self.port))
-		while self.isServing:
-			self.httpd.handle_request()
+		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.handler)
+		self.httpd.start()
 	
 	def stop(self):
-		self.isServing = False
+		self.httpd.running = False
 		# TODO: trigger handle_request()
-		self.httpd.socket.close()
 		self.httpd = None
 	
 	def register(self, name, object_, type_=None):
