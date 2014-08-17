@@ -21,7 +21,7 @@ write to any of the registered state variables.
 :license: MIT @see LICENSE
 '''
 from __future__ import print_function
-import sys, datetime, threading
+import sys, datetime, threading, copy
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
 	from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -74,7 +74,7 @@ class Handler(BaseHTTPRequestHandler):
 		self.end_headers()
 		inputs = []
 		# agghh! how are we going to pass state from the server down to here?
-		for (name, (object_, type_)) in sorted(Handler.registry.items()):
+		for (name, (object_, type_, copy_)) in sorted(Handler.registry.items()):
 			inputs.append(Handler._text_input.format(name=name))
 		self.wfile.write(Handler._html_form.format(inputs=''.join(inputs)))
 		 
@@ -95,6 +95,14 @@ class Handler(BaseHTTPRequestHandler):
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
+		for (name, list_) in post.items():
+			if name in self.registry:
+				(object_, type_, copy_) = self.registry[name]
+				# TODO: this will need to get more complex!
+				str_ = list_[0]
+				self.registry[name] = (object_, type_, type_(str_))
+			else:
+				debug('{name} found in POST, but {name} not registered!'.format(name=name))
 		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
 
 class _httpd_Thread(threading.Thread):
@@ -158,10 +166,9 @@ class Server():
 			type_ = type(object_)
 		if type_ not in self.request_handler.supported_types:
 			raise NotImplementedError(self.request_handler._type_not_implemented_msg.format(type_))
-		if name in self.registry:
-			warning('{name} already registered! Overwriting {name}.'.format(name=name))
 		# TODO: test/ensure object_ is stored as a reference
-		self.registry[name] = (object_, type_)
+		# TODO: consider a class for registry objects, rather than tuples
+		self.registry[name] = (object_, type_, copy.deepcopy(object_))
 	
 	def unregister(self, name):
 		if name in self.registry:
@@ -169,13 +176,29 @@ class Server():
 		else:
 			warning('''{name} isn't registered! Not able to unregister {name}.'''.format(name=name))
 	
-	def get(self, name):
+	def get_internal_copy(self, name):
+		'''
+		fetch the (possibly updated) value of 'name'.
+		
+		if using the pattern:
+				val = this.get_internal_copy("val")
+		please note that you have overwritten your application's reference
+		to `val'. You will then need to call
+				this.register('val', val)
+		This 'get and set' pattern is provided in the convienence function 'get'
+		'''
 		if name in self.registry:
-			(object_, type_) = self.registry[name]
-			return object_
+			(object_, type_, copy_) = self.registry[name]
+			return copy_
 		else:
 			warning('''{name} isn't registered! Returning None.'''.format(name=name))
 			return None
+	
+	def get(self, name):
+		copy_ = self.get_internal_copy(name)
+		if copy_ is not None:
+			self.register(name, copy_)
+		return copy_
 
 def demo():
 	import time
