@@ -177,7 +177,6 @@ class Server():
 	def start(self):
 		Handler._set_state(self.registry, self.messages) # pass reference
 		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
-		self.httpd.daemon = True
 		self.httpd.start()
 	
 	def stop(self):
@@ -220,6 +219,8 @@ class Server():
 		This 'get and set' pattern is provided in the convienence function 'get'
 		'''
 		now = datetime.datetime.now()
+		# TODO: replace this with client-side javascript to do the math,
+		# TODO: it freezes at "0 seconds ago" when the client app dies
 		self.request_handler._last_contacted_msg('{0} seconds ago ({1})'.format(
 				(now - self.last_contacted).seconds,
 				self.last_contacted
@@ -251,13 +252,17 @@ def demo():
 	debug('are we threaded?')
 	http_control_server.register('msg', msg)
 	http_control_server.warning('example warning')
-	while running:
-		time.sleep(0.1)
-		msg = http_control_server.get('msg')
-		_  = http_control_server.get_internal_copy('read_only')
-		running = http_control_server.get('running')
-		debug('msg: ', msg, '\read_only: ', read_only, '\nrunning: ', running)
-	http_control_server.stop()
+	try:
+		while running:
+			time.sleep(0.1)
+			msg = http_control_server.get('msg')
+			_  = http_control_server.get_internal_copy('read_only')
+			running = http_control_server.get('running')
+			debug('msg: ', msg, '\read_only: ', read_only, '\nrunning: ', running)
+	except KeyboardInterrupt:
+		pass
+	finally:
+		http_control_server.stop()
 	
 if __name__ == '__main__':
 	demo()
