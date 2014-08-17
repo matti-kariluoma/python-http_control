@@ -124,7 +124,7 @@ class Server():
 		'''
 		self.host = host
 		self.port = port
-		if handler is None:
+		if request_handler is None:
 			# create a new derived class
 			unique_name = 'Handler_%s' % datetime.datetime.now()
 			unique_name = unique_name.replace(' ', '_')
@@ -137,7 +137,7 @@ class Server():
 	
 	def start(self):
 		Handler._set_state(self.registry) # pass reference
-		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.handler)
+		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
 		self.httpd.start()
 	
 	def stop(self):
@@ -191,6 +191,7 @@ def demo():
 		time.sleep(0.1)
 		msg = http_control_server.get('msg')
 		running = http_control_server.get('running')
+		debug('msg: ', msg, '\nrunning: ', running)
 	http_control_server.stop()
 	
 if __name__ == '__main__':
