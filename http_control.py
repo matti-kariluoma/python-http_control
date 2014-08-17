@@ -25,9 +25,11 @@ import sys, datetime, threading, copy, StringIO
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
 	from http.server import BaseHTTPRequestHandler, HTTPServer
+	from http.client import HTTPConnection
 else:
 	from urlparse import parse_qs
 	from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+	from httplib import HTTPConnection
 import cgi
 __version__ = '0.1'
 
@@ -181,7 +183,10 @@ class Server():
 	
 	def stop(self):
 		self.httpd.running = False
-		# TODO: trigger handle_request()
+		# trigger handle_request()
+		connection = HTTPConnection('127.0.0.1', self.port, timeout=1)
+		connection.request('HEAD', '/')
+		_ = connection.getresponse()
 		self.httpd = None
 	
 	def register(self, name, object_, type_=None):
