@@ -29,7 +29,7 @@ else:
 	from urlparse import parse_qs
 	from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import cgi
-__version__ = '0.0'
+__version__ = '0.1'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
