@@ -50,15 +50,14 @@ class Handler(BaseHTTPRequestHandler):
  \t%s
 ''' % '\n\t'.join([str(t) for t in supported_types])
 	
-	_text_input = '''<label for='{name}'>{name}</label>
-<input type='text' name='{name}'></input>
+	_text_input = '''<p><label for='{name}'>{name}: {value}</label></p>
+<p><input type='text' name='{name}'></input></p>
 '''
-	_html_form = '''<html><body>
-<form method='POST'>
+	_html_form = '''<form method='POST'>
 {inputs}
-<input type='submit'></input>
+<p><input type='submit'></input></p>
 </form>
-</body></html>'''
+'''
 	
 	@classmethod
 	def _set_state(cls, registry):
@@ -67,16 +66,19 @@ class Handler(BaseHTTPRequestHandler):
 		future HTTP requests) will reference this state.
 		'''
 		cls.registry = registry
+		
+	def _create_form(self):
+		cls = type(self)
+		inputs = []
+		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
+			inputs.append(Handler._text_input.format(name=name, value=str(object_)))
+		return cls._html_form.format(inputs=''.join(inputs))
 	
 	def do_GET(self):
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
-		inputs = []
-		# agghh! how are we going to pass state from the server down to here?
-		for (name, (object_, type_, copy_)) in sorted(Handler.registry.items()):
-			inputs.append(Handler._text_input.format(name=name))
-		self.wfile.write(Handler._html_form.format(inputs=''.join(inputs)))
+		self.wfile.write('''<html><body>{0}</body></html>'''.format(self._create_form()))
 		 
 	def _parse_POST(self):
 		# thanks http://stackoverflow.com/a/13330449
@@ -91,19 +93,20 @@ class Handler(BaseHTTPRequestHandler):
 		return post
 
 	def do_POST(self):
+		cls = type(self)
 		post = self._parse_POST()
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
 		for (name, list_) in post.items():
-			if name in self.registry:
-				(object_, type_, copy_) = self.registry[name]
+			if name in cls.registry:
+				(object_, type_, copy_) = cls.registry[name]
 				# TODO: this will need to get more complex!
 				str_ = list_[0]
-				self.registry[name] = (object_, type_, type_(str_))
+				cls.registry[name] = (object_, type_, type_(str_))
 			else:
 				debug('{name} found in POST, but {name} not registered!'.format(name=name))
-		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
+		self.wfile.write('''<html><body>POST: {0}{1}</body></html>'''.format(str(post), self._create_form()))
 
 class _httpd_Thread(threading.Thread):
 	def __init__(self, *args, **kwargs):
@@ -204,17 +207,20 @@ def demo():
 	import time
 	debug('http_control version %s' % __version__)
 	running = True
+	read_only = 'the server will copy your data, but only you can overwrite it'
 	msg = 'you can register before or after starting the server'
 	http_control_server = Server()
-	http_control_server.register('running', running, bool)
+	http_control_server.register('running', running)
+	http_control_server.register('read_only', read_only)
 	http_control_server.start()
 	debug('are we threaded?')
-	http_control_server.register('msg', msg, str)
+	http_control_server.register('msg', msg)
 	while running:
 		time.sleep(0.1)
 		msg = http_control_server.get('msg')
+		_  = http_control_server.get_internal_copy('read_only')
 		running = http_control_server.get('running')
-		debug('msg: ', msg, '\nrunning: ', running)
+		debug('msg: ', msg, '\read_only: ', read_only, '\nrunning: ', running)
 	http_control_server.stop()
 	
 if __name__ == '__main__':
