@@ -38,23 +38,39 @@ def debug(*objs):
 def info(*objs):
 	print('INFO: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
 
+def warning(*objs):
+	# TODO: put warning messages onto web interface too
+	print('WARN: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
+
 class Handler(BaseHTTPRequestHandler):
+	supported_types = [bool, int, long, float, complex, str, unicode, tuple, list, dict]
+	_text_input = '''<label for='{name}'>{name}</label>
+<input type='text' name='{name}'></input>
+'''
+	_html_form = '''<html><body>
+<form method='POST'>
+{inputs}
+<input type='submit'></input>
+</form>
+</body></html>'''
+	
+	@classmethod
+	def _set_state(cls, registry):
+		'''
+		Sets the state of this class. All future instantiations (i.e.
+		future HTTP requests) will reference this state.
+		'''
+		cls.registry = registry
+	
 	def do_GET(self):
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
-		str_buffer = []
+		inputs = []
 		# agghh! how are we going to pass state from the server down to here?
-		for (a, b) in self.data:
-			str_buffer.append('<input type="text" name="{0}"></input>')
-		inputs = ''.join(str_buffer)
-		self.wfile.write('''<html><body>
-<form method='POST'>
-{0}
-<input type='submit'></input>
-</form>
-</body></html>'''.format(inputs)
-			)
+		for (name, (object_, type_)) in sorted(Handler.registry.items()):
+			inputs.append(Handler._text_input.format(name=name))
+		self.wfile.write(Handler._html_form.format(inputs=''.join(inputs)))
 		 
 	def _parse_POST(self):
 		# thanks http://stackoverflow.com/a/13330449
@@ -76,20 +92,23 @@ class Handler(BaseHTTPRequestHandler):
 		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
 
 class Server():
-	supported_types = [bool, int, long, float, complex, str, unicode, tuple, list, dict]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
  \t%s
 ''' % '\n\t'.join([str(t) for t in supported_types])
 	
-	def __init__(self, host='0.0.0.0', port=8080):
+	def __init__(self, host='0.0.0.0', port=8080, handler=Handler):
 		self.host = host
 		self.port = port
+		# grab own reference to handler class
+		self.handler = Server.handler
+		self.registry = {}
 		self.isServing = True
 	
 	def start(self):
-		self.httpd = HTTPServer((self.host, self.port), Handler)
+		Handler._set_state(self.registry) # pass reference
+		self.httpd = HTTPServer((self.host, self.port), self.handler)
 		info('Bound to ', (self.host, self.port))
 		while self.isServing:
 			self.httpd.handle_request()
@@ -98,6 +117,7 @@ class Server():
 		self.isServing = False
 		# TODO: trigger handle_request()
 		self.httpd.socket.close()
+		self.httpd = None
 	
 	def register(self, name, object_, type_=None):
 		'''
@@ -110,8 +130,12 @@ class Server():
 		'''
 		if type_ is None:
 			type_ = type(object_)
-		if type_ not in self.supported_types:
-			raise NotImplementedError(self._type_not_implemented_msg.format(type_))
+		if type_ not in Server.handler.supported_types:
+			raise NotImplementedError(Server._type_not_implemented_msg.format(type_))
+		if name in self.registry:
+			warning('{name} already registered! Overwriting {name}.'.format(name=name))
+		# TODO: test/ensure object_ is stored as a reference
+		self.registry[name] = (object_, type_)
 	
 	def unregister(self, name):
 		pass
