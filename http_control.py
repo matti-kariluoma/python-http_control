@@ -21,7 +21,7 @@ write to any of the registered state variables.
 :license: MIT @see LICENSE
 '''
 from __future__ import print_function
-import sys, datetime, threading, copy
+import sys, datetime, threading, copy, StringIO
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
 	from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -38,9 +38,13 @@ def debug(*objs):
 def info(*objs):
 	print('INFO: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
 
-def warning(*objs):
-	# TODO: put warning messages onto web interface too
-	print('WARN: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
+def _warning(*objs):
+	str_buf = StringIO.StringIO()
+	print('WARN: %s\n' % datetime.datetime.now(), *objs, file=str_buf)
+	msg = str_buf.getvalue()
+	str_buf.close()
+	print(msg, file=sys.stderr)
+	return msg
 
 class Handler(BaseHTTPRequestHandler):
 	supported_types = [bool, int, long, float, complex, str, unicode, tuple, list, dict]
@@ -58,27 +62,41 @@ class Handler(BaseHTTPRequestHandler):
 <p><input type='submit'></input></p>
 </form>
 '''
-	
+	_html_page = '''<html><body>
+{form}
+<p>Last system contact: {contact}</p>
+<p>System messages:</p>
+<p>{messages}</p>
+</body></html>'''
 	@classmethod
-	def _set_state(cls, registry):
+	def _set_state(cls, registry, messages):
 		'''
 		Sets the state of this class. All future instantiations (i.e.
 		future HTTP requests) will reference this state.
 		'''
 		cls.registry = registry
+		cls.messages = messages
+	@classmethod
+	def _last_contacted_msg(cls, last_contacted_msg):
+		cls.last_contacted_msg = last_contacted_msg
 		
 	def _create_form(self):
-		cls = type(self)
+		cls = self.__class__
 		inputs = []
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
 			inputs.append(Handler._text_input.format(name=name, value=str(object_)))
 		return cls._html_form.format(inputs=''.join(inputs))
 	
 	def do_GET(self):
+		cls = self.__class__
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
-		self.wfile.write('''<html><body>{0}</body></html>'''.format(self._create_form()))
+		self.wfile.write(cls._html_page.format(
+				form=self._create_form(), 
+				contact=cls.last_contacted_msg,
+				messages=''.join(['<p>{0}</p>'.format(msg) for msg in cls.messages])
+			))
 		 
 	def _parse_POST(self):
 		# thanks http://stackoverflow.com/a/13330449
@@ -93,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
 		return post
 
 	def do_POST(self):
-		cls = type(self)
+		cls = self.__class__
 		post = self._parse_POST()
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
@@ -124,6 +142,7 @@ class _httpd_Thread(threading.Thread):
 		self.httpd.socket.close()
 
 class Server():
+	messages_max_length = 255
 	def __init__(self, host='0.0.0.0', port=8080, request_handler=None):
 		'''
 		'request_handler' must not be used in multiple instances of 
@@ -144,11 +163,21 @@ class Server():
 		else:
 			self.request_handler = request_handler
 		self.registry = {}
+		self.messages = []
+		self.last_contacted = datetime.datetime.now()
 		self.isServing = True
 	
+	def warning(self, *objs):
+		# TODO: don't display the same error over and over again
+		msg = _warning(*objs)
+		self.messages.append(msg)
+		if len(self.messages) > self.__class__.messages_max_length:
+			self.messages.pop(0) # remove oldest
+	
 	def start(self):
-		Handler._set_state(self.registry) # pass reference
+		Handler._set_state(self.registry, self.messages) # pass reference
 		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
+		self.httpd.daemon = True
 		self.httpd.start()
 	
 	def stop(self):
@@ -177,7 +206,7 @@ class Server():
 		if name in self.registry:
 			del self.registry[name]
 		else:
-			warning('''{name} isn't registered! Not able to unregister {name}.'''.format(name=name))
+			self.warning('''{name} isn't registered! Not able to unregister {name}.'''.format(name=name))
 	
 	def get_internal_copy(self, name):
 		'''
@@ -190,11 +219,17 @@ class Server():
 				this.register('val', val)
 		This 'get and set' pattern is provided in the convienence function 'get'
 		'''
+		now = datetime.datetime.now()
+		self.request_handler._last_contacted_msg('{0} seconds ago ({1})'.format(
+				(now - self.last_contacted).seconds,
+				self.last_contacted
+			))
+		self.last_contacted = now
 		if name in self.registry:
 			(object_, type_, copy_) = self.registry[name]
 			return copy_
 		else:
-			warning('''{name} isn't registered! Returning None.'''.format(name=name))
+			self.warning('''{name} isn't registered! Returning None.'''.format(name=name))
 			return None
 	
 	def get(self, name):
@@ -215,6 +250,7 @@ def demo():
 	http_control_server.start()
 	debug('are we threaded?')
 	http_control_server.register('msg', msg)
+	http_control_server.warning('example warning')
 	while running:
 		time.sleep(0.1)
 		msg = http_control_server.get('msg')
