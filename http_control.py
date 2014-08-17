@@ -31,7 +31,7 @@ else:
 	from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 	from httplib import HTTPConnection
 import cgi
-__version__ = '0.1'
+__version__ = '0.2'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
@@ -70,6 +70,7 @@ class Handler(BaseHTTPRequestHandler):
 <p>System messages:</p>
 <p>{messages}</p>
 </body></html>'''
+	
 	@classmethod
 	def _set_state(cls, registry, messages):
 		'''
@@ -78,27 +79,36 @@ class Handler(BaseHTTPRequestHandler):
 		'''
 		cls.registry = registry
 		cls.messages = messages
+	
 	@classmethod
-	def _last_contacted_msg(cls, last_contacted_msg):
-		cls.last_contacted_msg = last_contacted_msg
+	def _last_contacted(cls, last_contacted):
+		cls.last_contacted = last_contacted
 		
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
-			inputs.append(Handler._text_input.format(name=name, value=str(object_)))
+			inputs.append(cls._text_input.format(name=name, value=str(object_)))
 		return cls._html_form.format(inputs=''.join(inputs))
 	
 	def do_GET(self):
-		cls = self.__class__
-		self.send_response(200)
-		self.send_header('Content-type', 'text/html')
-		self.end_headers()
-		self.wfile.write(cls._html_page.format(
-				form=self._create_form(), 
-				contact=cls.last_contacted_msg,
-				messages=''.join(['<p>{0}</p>'.format(msg) for msg in cls.messages])
-			))
+		if self.path != '/':
+			self.send_response(301)
+			self.send_header('Location', '/')
+			self.end_headers()
+		else:
+			cls = self.__class__
+			self.send_response(200)
+			self.send_header('Content-type', 'text/html')
+			self.end_headers()
+			self.wfile.write(cls._html_page.format(
+					form=self._create_form(), 
+					contact='{0} seconds ago ({1})'.format(
+							(datetime.datetime.now() - cls.last_contacted).seconds,
+							self.last_contacted
+						),
+					messages=''.join(['<p>{0}</p>'.format(msg) for msg in cls.messages])
+				))
 		 
 	def _parse_POST(self):
 		# thanks http://stackoverflow.com/a/13330449
@@ -115,9 +125,6 @@ class Handler(BaseHTTPRequestHandler):
 	def do_POST(self):
 		cls = self.__class__
 		post = self._parse_POST()
-		self.send_response(200)
-		self.send_header('Content-type', 'text/html')
-		self.end_headers()
 		for (name, list_) in post.items():
 			if name in cls.registry:
 				(object_, type_, copy_) = cls.registry[name]
@@ -126,7 +133,9 @@ class Handler(BaseHTTPRequestHandler):
 				cls.registry[name] = (object_, type_, type_(str_))
 			else:
 				debug('{name} found in POST, but {name} not registered!'.format(name=name))
-		self.wfile.write('''<html><body>POST: {0}{1}</body></html>'''.format(str(post), self._create_form()))
+		self.send_response(303)
+		self.send_header('Location', '/')
+		self.end_headers()
 
 class _httpd_Thread(threading.Thread):
 	def __init__(self, *args, **kwargs):
@@ -166,7 +175,6 @@ class Server():
 			self.request_handler = request_handler
 		self.registry = {}
 		self.messages = []
-		self.last_contacted = datetime.datetime.now()
 		self.isServing = True
 	
 	def warning(self, *objs):
@@ -177,7 +185,8 @@ class Server():
 			self.messages.pop(0) # remove oldest
 	
 	def start(self):
-		Handler._set_state(self.registry, self.messages) # pass reference
+		self.request_handler._set_state(self.registry, self.messages) # pass reference
+		self.request_handler._last_contacted(datetime.datetime.now())
 		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
 		self.httpd.start()
 	
@@ -223,14 +232,7 @@ class Server():
 				this.register('val', val)
 		This 'get and set' pattern is provided in the convienence function 'get'
 		'''
-		now = datetime.datetime.now()
-		# TODO: replace this with client-side javascript to do the math,
-		# TODO: it freezes at "0 seconds ago" when the client app dies
-		self.request_handler._last_contacted_msg('{0} seconds ago ({1})'.format(
-				(now - self.last_contacted).seconds,
-				self.last_contacted
-			))
-		self.last_contacted = now
+		self.request_handler._last_contacted(datetime.datetime.now())
 		if name in self.registry:
 			(object_, type_, copy_) = self.registry[name]
 			return copy_
