@@ -44,6 +44,12 @@ def warning(*objs):
 
 class Handler(BaseHTTPRequestHandler):
 	supported_types = [bool, int, long, float, complex, str, unicode, tuple, list, dict]
+	_type_not_implemented_msg = '''
+ {0} not supported.
+ You will need to manually convert it to and from one of: 
+ \t%s
+''' % '\n\t'.join([str(t) for t in supported_types])
+	
 	_text_input = '''<label for='{name}'>{name}</label>
 <input type='text' name='{name}'></input>
 '''
@@ -92,17 +98,25 @@ class Handler(BaseHTTPRequestHandler):
 		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
 
 class Server():
-	_type_not_implemented_msg = '''
- {0} not supported.
- You will need to manually convert it to and from one of: 
- \t%s
-''' % '\n\t'.join([str(t) for t in supported_types])
-	
-	def __init__(self, host='0.0.0.0', port=8080, handler=Handler):
+	def __init__(self, host='0.0.0.0', port=8080, handler=None):
+		'''
+		The 'handler' must not be used in multiple instances of 
+		Server, or else they will overwrite each others state!
+		
+		host: The host to allow connections addressed to, or 0.0.0.0 for any
+		port: Port to listen on
+		handler: A subclass of Handler
+		'''
 		self.host = host
 		self.port = port
-		# grab own reference to handler class
-		self.handler = Server.handler
+		if handler is None:
+			# create a new derived class
+			unique_name = 'Handler_%s' % datetime.datetime.now()
+			unique_name = unique_name.replace(' ', '_')
+			self.handler = type(unique_name, (Handler, object), {})
+			debug('New Handler created: ', self.handler)
+		else:
+			self.handler = handler
 		self.registry = {}
 		self.isServing = True
 	
@@ -130,8 +144,8 @@ class Server():
 		'''
 		if type_ is None:
 			type_ = type(object_)
-		if type_ not in Server.handler.supported_types:
-			raise NotImplementedError(Server._type_not_implemented_msg.format(type_))
+		if type_ not in self.handler.supported_types:
+			raise NotImplementedError(self.handler._type_not_implemented_msg.format(type_))
 		if name in self.registry:
 			warning('{name} already registered! Overwriting {name}.'.format(name=name))
 		# TODO: test/ensure object_ is stored as a reference
