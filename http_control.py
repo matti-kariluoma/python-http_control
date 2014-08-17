@@ -99,13 +99,13 @@ class Handler(BaseHTTPRequestHandler):
 
 class _httpd_Thread(threading.Thread):
 	def __init__(self, *args, **kwargs):
-		self.host = kwargs.pop('host')
-		self.port = kwargs.pop('port')
-		self.handler = kwargs.pop('handler')
+		host = kwargs.pop('host')
+		port = kwargs.pop('port')
+		handler = kwargs.pop('handler')
 		self.running = True
 		super(_httpd_Thread, self).__init__(*args, **kwargs)
-		self.httpd = HTTPServer((self.host, self.port), self.handler)
-		info('Bound to ', (self.host, self.port))
+		info('Attempting to bind: ', (host, port))
+		self.httpd = HTTPServer((host, port), handler)
 		
 	def run(self):
 		while self.running:
