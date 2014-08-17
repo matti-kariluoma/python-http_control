@@ -43,12 +43,18 @@ class Handler(BaseHTTPRequestHandler):
 		self.send_response(200)
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
+		str_buffer = []
+		# agghh! how are we going to pass state from the server down to here?
+		for (a, b) in self.data:
+			str_buffer.append('<input type="text" name="{0}"></input>')
+		inputs = ''.join(str_buffer)
 		self.wfile.write('''<html><body>
-		<form method='POST'>
-		<input type='text' name='hello'></input>
-		<input type='submit'></input>
-		</form>
-		</body></html>''')
+<form method='POST'>
+{0}
+<input type='submit'></input>
+</form>
+</body></html>'''.format(inputs)
+			)
 		 
 	def _parse_POST(self):
 		# thanks http://stackoverflow.com/a/13330449
