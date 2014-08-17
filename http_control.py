@@ -98,14 +98,14 @@ class Handler(BaseHTTPRequestHandler):
 		self.wfile.write('''<html><body>{0}</body></html>'''.format(str(post)))
 
 class Server():
-	def __init__(self, host='0.0.0.0', port=8080, handler=None):
+	def __init__(self, host='0.0.0.0', port=8080, request_handler=None):
 		'''
-		The 'handler' must not be used in multiple instances of 
+		'request_handler' must not be used in multiple instances of 
 		Server, or else they will overwrite each others state!
 		
 		host: The host to allow connections addressed to, or 0.0.0.0 for any
 		port: Port to listen on
-		handler: A subclass of Handler
+		request_handler: A subclass of Handler
 		'''
 		self.host = host
 		self.port = port
@@ -113,10 +113,10 @@ class Server():
 			# create a new derived class
 			unique_name = 'Handler_%s' % datetime.datetime.now()
 			unique_name = unique_name.replace(' ', '_')
-			self.handler = type(unique_name, (Handler, object), {})
-			debug('New Handler created: ', self.handler)
+			self.request_handler = type(unique_name, (Handler, object), {})
+			debug('New Handler created: ', self.request_handler)
 		else:
-			self.handler = handler
+			self.request_handler = request_handler
 		self.registry = {}
 		self.isServing = True
 	
@@ -144,17 +144,26 @@ class Server():
 		'''
 		if type_ is None:
 			type_ = type(object_)
-		if type_ not in self.handler.supported_types:
-			raise NotImplementedError(self.handler._type_not_implemented_msg.format(type_))
+		if type_ not in self.request_handler.supported_types:
+			raise NotImplementedError(self.request_handler._type_not_implemented_msg.format(type_))
 		if name in self.registry:
 			warning('{name} already registered! Overwriting {name}.'.format(name=name))
 		# TODO: test/ensure object_ is stored as a reference
 		self.registry[name] = (object_, type_)
 	
 	def unregister(self, name):
-		pass
+		if name in self.registry:
+			del self.registry[name]
+		else:
+			warning('''{name} isn't registered! Not able to unregister {name}.'''.format(name=name))
+	
 	def get(self, name):
-		pass
+		if name in self.registry:
+			(object_, type_) = self.registry[name]
+			return object_
+		else:
+			warning('''{name} isn't registered! Returning None.'''.format(name=name))
+			return None
 
 def demo():
 	import time
