@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# coding: ascii
+# coding: utf-8
 '''
 http_control allows an existing application to .register() state 
 variables to be exposed to clients over HTTP + HTML. The HTML is 
@@ -20,7 +20,7 @@ write to any of the registered state variables.
 :copyright: 2014 Matti Kariluoma <matti@kariluo.ma>
 :license: MIT @see LICENSE
 '''
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 import sys, datetime, threading, copy, StringIO
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
@@ -31,7 +31,7 @@ else:
 	from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 	from httplib import HTTPConnection
 import cgi
-__version__ = '0.2'
+__version__ = '0.3'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
@@ -49,7 +49,7 @@ def _warning(*objs):
 	return msg
 
 class Handler(BaseHTTPRequestHandler):
-	supported_types = [bool, int, long, float, complex, str, unicode, tuple, list, dict]
+	supported_types = [bool, int, long, float, str, unicode]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
@@ -58,6 +58,9 @@ class Handler(BaseHTTPRequestHandler):
 	
 	_text_input = '''<p><label for='{name}'>{name}: {value}</label></p>
 <p><input type='text' name='{name}'></input></p>
+'''
+	_checkbox_input = '''<p><label for='{name}'>{name}: {value}</label></p>
+<p><input type='checkbox' name='{name}' {checked}></input></p>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -88,8 +91,23 @@ class Handler(BaseHTTPRequestHandler):
 		cls = self.__class__
 		inputs = []
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
-			inputs.append(cls._text_input.format(name=name, value=str(object_)))
+			if type_ in (int, long, float, str, unicode):
+				inputs.append(cls._text_input.format(name=name, value=unicode(object_)))
+			elif type_ is bool:
+				checked = ''
+				if bool(object_):
+					checked = 'checked'
+				inputs.append(cls._checkbox_input.format(
+						name=name, 
+						value=str(object_), 
+						checked=checked
+					))
+			else:
+				raise NotImplementedError(cls._type_not_implemented_msg.format(type_))
 		return cls._html_form.format(inputs=''.join(inputs))
+	
+	def _write(self, text):
+		self.wfile.write(text.encode('utf-16'))
 	
 	def do_GET(self):
 		if self.path != '/':
@@ -97,11 +115,11 @@ class Handler(BaseHTTPRequestHandler):
 			self.send_header('Location', '/')
 			self.end_headers()
 		else:
-			cls = self.__class__
 			self.send_response(200)
 			self.send_header('Content-type', 'text/html')
 			self.end_headers()
-			self.wfile.write(cls._html_page.format(
+			cls = self.__class__
+			self._write(cls._html_page.format(
 					form=self._create_form(), 
 					contact='{0} seconds ago ({1})'.format(
 							(datetime.datetime.now() - cls.last_contacted).seconds,
@@ -125,17 +143,29 @@ class Handler(BaseHTTPRequestHandler):
 	def do_POST(self):
 		cls = self.__class__
 		post = self._parse_POST()
-		for (name, list_) in post.items():
-			if name in cls.registry:
-				(object_, type_, copy_) = cls.registry[name]
-				# TODO: this will need to get more complex!
-				str_ = list_[0]
-				cls.registry[name] = (object_, type_, type_(str_))
+		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
+			if type_ in (int, long, float, str, unicode):
+				if name in post:
+					list_ = post[name]
+					str_ = list_[-1].decode('utf-8')
+					if str_ != '':
+						cls.registry[name] = (object_, type_, type_(str_))
+				else:
+					debug('{name} found in POST, but {name} not registered!'.format(name=name))
+			elif type_ is bool:
+				if name in post:
+					cls.registry[name] = (object_, type_, type_(True))
+				else:
+					cls.registry[name] = (object_, type_, type_(False))
 			else:
-				debug('{name} found in POST, but {name} not registered!'.format(name=name))
+				raise NotImplementedError(cls._type_not_implemented_msg.format(type_))
+			
 		self.send_response(303)
 		self.send_header('Location', '/')
 		self.end_headers()
+		# TODO: silly, dirty hack to make the webpage reflect current state, pls remove
+		import time
+		time.sleep(0.2)
 
 class _httpd_Thread(threading.Thread):
 	def __init__(self, *args, **kwargs):
@@ -169,7 +199,7 @@ class Server():
 			# create a new derived class
 			unique_name = 'Handler_%s' % datetime.datetime.now()
 			unique_name = unique_name.replace(' ', '_')
-			self.request_handler = type(unique_name, (Handler, object), {})
+			self.request_handler = type(str(unique_name), (Handler, object), {})
 			debug('New Handler created: ', self.request_handler)
 		else:
 			self.request_handler = request_handler
@@ -252,20 +282,32 @@ def demo():
 	running = True
 	read_only = 'the server will copy your data, but only you can overwrite it'
 	msg = 'you can register before or after starting the server'
+	umsg = unicode('les derrières')
+	i = 0
+	l = 1l
+	f = 2.0
 	http_control_server = Server()
 	http_control_server.register('running', running)
 	http_control_server.register('read_only', read_only)
 	http_control_server.start()
 	debug('are we threaded?')
 	http_control_server.register('msg', msg)
+	http_control_server.register('umsg', umsg)
+	http_control_server.register('i', i)
+	http_control_server.register('l', l)
+	http_control_server.register('f', f)
 	http_control_server.warning('example warning')
 	try:
 		while running:
 			time.sleep(0.1)
-			msg = http_control_server.get('msg')
-			_  = http_control_server.get_internal_copy('read_only')
 			running = http_control_server.get('running')
-			debug('msg: ', msg, '\read_only: ', read_only, '\nrunning: ', running)
+			_  = http_control_server.get_internal_copy('read_only')
+			msg = http_control_server.get('msg')
+			umsg = http_control_server.get('umsg')
+			i = http_control_server.get('i')
+			l = http_control_server.get('l')
+			f = http_control_server.get('f')
+		debug('msg: ', msg, '\nread_only: ', read_only, '\nrunning: ', running)
 	except KeyboardInterrupt:
 		pass
 	finally:
