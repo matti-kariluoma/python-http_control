@@ -21,15 +21,19 @@ write to any of the registered state variables.
 :license: MIT @see LICENSE
 '''
 from __future__ import print_function, unicode_literals
-import sys, datetime, threading, copy, StringIO
+import sys, datetime, threading, copy
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
 	from http.server import BaseHTTPRequestHandler, HTTPServer
 	from http.client import HTTPConnection
+	import io as StringIO
+	long = int
+	unicode = str
 else:
 	from urlparse import parse_qs
 	from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 	from httplib import HTTPConnection
+	import StringIO
 import cgi
 __version__ = '0.3'
 
@@ -99,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
 					checked = 'checked'
 				inputs.append(cls._checkbox_input.format(
 						name=name, 
-						value=str(object_), 
+						value=unicode(object_), 
 						checked=checked
 					))
 			else:
@@ -135,7 +139,12 @@ class Handler(BaseHTTPRequestHandler):
 			post = cgi.parse_multipart(self.rfile, pdict)
 		elif ctype == 'application/x-www-form-urlencoded':
 			length = int(self.headers['content-length'])
-			post = parse_qs(self.rfile.read(length), keep_blank_values=1)
+			try:
+				post = parse_qs(self.rfile.read(length), keep_blank_values=False)
+			except UnicodeEncodeError:
+				# jesus christ python 3, get your shit together
+				warning('''sorry, can't use unicode and python3. Try again with python2.''')
+				raise
 		else:
 			post = {}
 		return post
@@ -148,10 +157,10 @@ class Handler(BaseHTTPRequestHandler):
 				if name in post:
 					list_ = post[name]
 					str_ = list_[-1].decode('utf-8')
+					if not sys.version.startswith('3') and type_ is str:
+						str_ = str_.encode('ascii', 'replace')
 					if str_ != '':
 						cls.registry[name] = (object_, type_, type_(str_))
-				else:
-					debug('{name} found in POST, but {name} not registered!'.format(name=name))
 			elif type_ is bool:
 				if name in post:
 					cls.registry[name] = (object_, type_, type_(True))
@@ -281,10 +290,10 @@ def demo():
 	debug('http_control version %s' % __version__)
 	running = True
 	read_only = 'the server will copy your data, but only you can overwrite it'
-	msg = 'you can register before or after starting the server'
+	msg = str('you can register before or after starting the server')
 	umsg = unicode('les derrières')
 	i = 0
-	l = 1l
+	l = long(1)
 	f = 2.0
 	http_control_server = Server()
 	http_control_server.register('running', running)
