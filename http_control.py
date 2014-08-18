@@ -35,7 +35,7 @@ else:
 	from httplib import HTTPConnection
 	import StringIO
 import cgi
-__version__ = '0.3'
+__version__ = '0.4'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
