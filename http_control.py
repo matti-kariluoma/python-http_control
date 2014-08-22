@@ -35,7 +35,15 @@ else:
 	from httplib import HTTPConnection
 	import StringIO
 import cgi
-__version__ = '0.4'
+try:
+	import zeroconf
+	import netifaces
+	import socket # only needed if zeroconf imports correctly
+except ImportError:
+	zeroconf = None
+	netifaces = None
+
+__version__ = '0.5'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
@@ -193,7 +201,7 @@ class _httpd_Thread(threading.Thread):
 
 class Server():
 	messages_max_length = 255
-	def __init__(self, host='0.0.0.0', port=8080, request_handler=None):
+	def __init__(self, host='0.0.0.0', port=8080, request_handler=None, service_name=None):
 		'''
 		'request_handler' must not be used in multiple instances of 
 		Server, or else they will overwrite each others state!
@@ -201,20 +209,27 @@ class Server():
 		host: The host to allow connections addressed to, or 0.0.0.0 for any
 		port: Port to listen on
 		request_handler: A subclass of Handler
+		service_name: user-friendly name to display when using zeroconf 
+				service autodiscovery
 		'''
 		self.host = host
 		self.port = port
+		now = datetime.datetime.now()
 		if request_handler is None:
 			# create a new derived class
-			unique_name = 'Handler_%s' % datetime.datetime.now()
+			unique_name = 'Handler_%s' % now 
 			unique_name = unique_name.replace(' ', '_')
 			self.request_handler = type(str(unique_name), (Handler, object), {})
 			debug('New Handler created: ', self.request_handler)
 		else:
 			self.request_handler = request_handler
+		if service_name is None:
+			self.service_name = 'http_control_%s' % now
+			self.service_name = self.service_name.replace(' ', '_')
+		else:
+			self.service_name = service_name
 		self.registry = {}
 		self.messages = []
-		self.isServing = True
 	
 	def warning(self, *objs):
 		# TODO: don't display the same error over and over again
@@ -223,19 +238,72 @@ class Server():
 		if len(self.messages) > self.__class__.messages_max_length:
 			self.messages.pop(0) # remove oldest
 	
-	def start(self):
+	def _get_address(self, force_local_ip):
+		if not netifaces:
+			return None
+		interfaces = netifaces.interfaces()
+		ips = []
+		for iface in interfaces:
+			if netifaces.AF_INET in netifaces.ifaddresses(iface):
+				for address in netifaces.ifaddresses(iface)[netifaces.AF_INET]:
+					if 'addr' in address:
+						ip = address['addr']
+						if ip.startswith('127'):
+							continue
+						if force_local_ip and not (
+								ip.startswith('10') or
+								ip.startswith('172.16') or
+								ip.startswith('192.168')
+							):
+								continue		
+						ips.append(ip)
+		if ips:
+			return socket.inet_aton(ips[-1])
+		return None	
+	
+	def start(self, force_local_ip=True):
+		'''
+		force_local_ip: if zeroconf enabled, forces the use of a local ip
+				address when advertising this service ( 192.168.x , 172.16.x, 
+				or 10.x )
+		'''
 		self.request_handler._set_state(self.registry, self.messages) # pass reference
 		self.request_handler._last_contacted(datetime.datetime.now())
 		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
 		self.httpd.start()
+		if not zeroconf:
+			info('python-zeroconf not found! Unable to configure network autodiscovery.')
+		else:
+			self.service_info = zeroconf.ServiceInfo(
+					"_http._tcp.local.",
+					"{0}._http._tcp.local.".format(self.service_name),
+					address=self._get_address(force_local_ip),
+					port=self.port,
+					properties={'path': '/'}
+				)
+			self.zeroconf = zeroconf.Zeroconf()
+			try:
+				self.zeroconf.registerService(self.service_info)
+			except AssertionError as e:
+				debug(e)
 	
 	def stop(self):
 		self.httpd.running = False
 		# trigger handle_request()
-		connection = HTTPConnection('127.0.0.1', self.port, timeout=1)
-		connection.request('HEAD', '/')
-		_ = connection.getresponse()
+		try:
+			connection = HTTPConnection('127.0.0.1', self.port, timeout=1)
+			connection.request('HEAD', '/')
+			_ = connection.getresponse()
+		except:
+			pass
 		self.httpd = None
+		if zeroconf:
+			try:
+				self.zeroconf.unregisterService(self.service_info)
+				self.zeroconf.close()
+			except:
+				pass
+			self.zeroconf = None
 	
 	def register(self, name, object_, type_=None):
 		'''
@@ -280,6 +348,11 @@ class Server():
 			return None
 	
 	def get(self, name):
+		'''
+		A convenience wrapper for 'get_internal_copy'.
+		
+		Fetches the value of 'name', registers it, then returns the value.
+		'''
 		copy_ = self.get_internal_copy(name)
 		if copy_ is not None:
 			self.register(name, copy_)

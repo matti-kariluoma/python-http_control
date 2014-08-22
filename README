@@ -1,0 +1,13 @@
+http_control sets up a webpage interface to the internals of your
+python application (caveat emptor!).
+
+No external dependencies are need to use this module. If the (optional)
+packages python-zeroconf and python-netifaces are installed, network
+service auto-discovery is enabled.
+
+To enable zeroconf/Bonjour auto-discovery:
+# prerequisites for optional functionality, debian-like
+$ sudo apt-get install python-pip
+$ sudo pip install --upgrade pip
+# may need to exit shell and open a new one
+$ sudo pip install zeroconf netifaces
