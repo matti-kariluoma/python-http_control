@@ -68,11 +68,13 @@ class Handler(BaseHTTPRequestHandler):
  \t%s
 ''' % '\n\t'.join([str(t) for t in supported_types])
 	
-	_text_input = '''<p><label for='{name}'>{name}: {value}</label></p>
-<p><input type='text' name='{name}'></input></p>
+	_label = '''<p>Current value for "{name}": {actual_value}</p>
+<p>Most recent entered value for "{name}": {our_value}</p>
+<p><label for='{name}'>Enter a new value for "{name}": </label></p>
 '''
-	_checkbox_input = '''<p><label for='{name}'>{name}: {value}</label></p>
-<p><input type='checkbox' name='{name}' {checked}></input></p>
+	_text_input = '''<p><input type='text' name='{name}'></input></p>
+'''
+	_checkbox_input = '''<p><input type='checkbox' name='{name}' {checked}></input></p>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -104,14 +106,23 @@ class Handler(BaseHTTPRequestHandler):
 		inputs = []
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
 			if type_ in (int, long, float, str, unicode):
-				inputs.append(cls._text_input.format(name=name, value=unicode(object_)))
+				inputs.append(cls._label.format(
+						name=name,
+						actual_value=unicode(object_), 
+						our_value=unicode(copy_)
+					))
+				inputs.append(cls._text_input.format(name=name))
 			elif type_ is bool:
 				checked = ''
 				if bool(object_):
 					checked = 'checked'
+				inputs.append(cls._label.format(
+						name=name,
+						actual_value=unicode(object_), 
+						our_value=unicode(copy_)
+					))
 				inputs.append(cls._checkbox_input.format(
-						name=name, 
-						value=unicode(object_), 
+						name=name,
 						checked=checked
 					))
 			else:
