@@ -201,7 +201,14 @@ class _httpd_Thread(threading.Thread):
 
 class Server():
 	messages_max_length = 255
-	def __init__(self, host='0.0.0.0', port=8080, request_handler=None, service_name=None):
+	def __init__(
+			self, 
+			host='0.0.0.0', 
+			port=8080, 
+			request_handler=None, 
+			zeroconf_disabled=False, 
+			service_name=None
+		):
 		'''
 		'request_handler' must not be used in multiple instances of 
 		Server, or else they will overwrite each others state!
@@ -209,6 +216,7 @@ class Server():
 		host: The host to allow connections addressed to, or 0.0.0.0 for any
 		port: Port to listen on
 		request_handler: A subclass of Handler
+		zeroconf_disabled: when True, disables zeroconf feature
 		service_name: user-friendly name to display when using zeroconf 
 				service autodiscovery
 		'''
@@ -223,6 +231,7 @@ class Server():
 			debug('New Handler created: ', self.request_handler)
 		else:
 			self.request_handler = request_handler
+		self.zeroconf_disabled = zeroconf_disabled
 		if service_name is None:
 			self.service_name = 'http_control_%s' % now
 			self.service_name = self.service_name.replace(' ', '_')
@@ -255,7 +264,7 @@ class Server():
 								ip.startswith('172.16') or
 								ip.startswith('192.168')
 							):
-								continue		
+							continue		
 						ips.append(ip)
 		if ips:
 			return socket.inet_aton(ips[-1])
@@ -271,8 +280,9 @@ class Server():
 		self.request_handler._last_contacted(datetime.datetime.now())
 		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
 		self.httpd.start()
-		if not zeroconf:
-			info('python-zeroconf not found! Unable to configure network autodiscovery.')
+		if not zeroconf or self.zeroconf_disabled:
+			info('python-zeroconf not found, or disabled! Unable to configure network autodiscovery.')
+			self.zeroconf = None
 		else:
 			self.service_info = zeroconf.ServiceInfo(
 					"_http._tcp.local.",
@@ -297,7 +307,7 @@ class Server():
 		except:
 			pass
 		self.httpd = None
-		if zeroconf:
+		if not self.zeroconf_disabled and self.zeroconf:
 			try:
 				self.zeroconf.unregisterService(self.service_info)
 				self.zeroconf.close()
