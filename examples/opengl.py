@@ -86,9 +86,10 @@ def update_from_http_control():
 	global cam_x
 	global cam_y
 	global cam_z
-	cam_x = http_server.get('cam_x')
-	cam_y = http_server.get('cam_y')
-	cam_z = http_server.get('cam_z')
+	if http_server.updated():
+		cam_x = http_server.get('cam_x')
+		cam_y = http_server.get('cam_y')
+		cam_z = http_server.get('cam_z')
 
 def keyboard(key, x, y):
 	global cam_x

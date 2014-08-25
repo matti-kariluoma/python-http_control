@@ -100,7 +100,11 @@ class Handler(BaseHTTPRequestHandler):
 	@classmethod
 	def _last_contacted(cls, last_contacted):
 		cls.last_contacted = last_contacted
-		
+	
+	@classmethod
+	def set_updated(cls, updated):
+		cls.updated = updated
+	
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
@@ -170,6 +174,7 @@ class Handler(BaseHTTPRequestHandler):
 
 	def do_POST(self):
 		cls = self.__class__
+		cls.set_updated(True)
 		post = self._parse_POST()
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
 			if type_ in (int, long, float, str, unicode):
@@ -250,6 +255,7 @@ class Server():
 			self.service_name = service_name
 		self.registry = {}
 		self.messages = []
+		self.request_handler.set_updated(False)
 	
 	def warning(self, *objs):
 		# TODO: don't display the same error over and over again
@@ -257,6 +263,9 @@ class Server():
 		self.messages.append(msg)
 		if len(self.messages) > self.__class__.messages_max_length:
 			self.messages.pop(0) # remove oldest
+	
+	def updated(self):
+		return self.request_handler.updated
 	
 	def _get_address(self, force_local_ip):
 		if not netifaces:
@@ -377,6 +386,7 @@ class Server():
 		copy_ = self.get_internal_copy(name)
 		if copy_ is not None:
 			self.register(name, copy_)
+			self.request_handler.set_updated(False)
 		return copy_
 
 def demo():
