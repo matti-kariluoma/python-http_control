@@ -12,6 +12,7 @@ http://code.activestate.com/recipes/325391-open-a-glut-window-and-draw-a-sphere-
 from __future__ import print_function, unicode_literals
 import sys, datetime
 from OpenGL import GL as gl, GLU as glu, GLUT as glut
+import http_control
 __version__ = '1.0'
 
 name = 'http_control demo'
@@ -19,6 +20,7 @@ width, height = (800, 600)
 cam_x = 0.0
 cam_y = 0.0
 cam_z = -4.0
+http_server = http_control.Server()
 
 def main():
 	glut.glutInit(sys.argv)
@@ -33,6 +35,10 @@ def main():
 	lights()
 	glut.glutDisplayFunc(display)
 	glut.glutKeyboardFunc(keyboard)
+	http_server.register('cam_x', cam_x)
+	http_server.register('cam_y', cam_y)
+	http_server.register('cam_z', cam_z)
+	http_server.start()
 	glut.glutMainLoop()
 	return
 
@@ -69,17 +75,27 @@ def sphere():
 	glut.glutSolidSphere(1, 40, 40)
 
 def display():
+	update_from_http_control()
 	gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
 	camera()
 	gl.glTranslate(cam_x, cam_y, cam_z)
 	sphere()
 	glut.glutSwapBuffers()
 
+def update_from_http_control():
+	global cam_x
+	global cam_y
+	global cam_z
+	cam_x = http_server.get('cam_x')
+	cam_y = http_server.get('cam_y')
+	cam_z = http_server.get('cam_z')
+
 def keyboard(key, x, y):
 	global cam_x
 	global cam_z
 	
 	if key == 'q' or key == '\033': # q or esc key
+		http_server.stop()
 		sys.exit(0)
 	elif key == 'w':
 		cam_z += 0.1
