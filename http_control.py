@@ -103,8 +103,16 @@ class Handler(BaseHTTPRequestHandler):
 	
 	@classmethod
 	def set_updated(cls, updated):
-		cls.updated = updated
+		cls._updated = updated
 	
+	@classmethod
+	def updated(cls):
+		if cls._updated:
+			cls._updated = False
+			return True
+		else:
+			return False
+
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
@@ -265,7 +273,7 @@ class Server():
 			self.messages.pop(0) # remove oldest
 	
 	def updated(self):
-		return self.request_handler.updated
+		return self.request_handler.updated()
 	
 	def _get_address(self, force_local_ip):
 		if not netifaces:
@@ -386,7 +394,6 @@ class Server():
 		copy_ = self.get_internal_copy(name)
 		if copy_ is not None:
 			self.register(name, copy_)
-			self.request_handler.set_updated(False)
 		return copy_
 
 def demo():
