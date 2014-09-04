@@ -22,7 +22,7 @@ cam_y = 0.0
 cam_z = -4.0
 http_server = http_control.Server()
 
-def main():
+def init():
 	glut.glutInit(sys.argv)
 	glut.glutInitDisplayMode(glut.GLUT_DOUBLE | glut.GLUT_RGB | glut.GLUT_DEPTH)
 	glut.glutInitWindowSize(width, height)
@@ -39,6 +39,8 @@ def main():
 	http_server.register('cam_y', cam_y)
 	http_server.register('cam_z', cam_z)
 	http_server.start()
+	
+def main():
 	glut.glutMainLoop()
 	return
 
@@ -110,4 +112,5 @@ def keyboard(key, x, y):
 	glut.glutPostRedisplay()
 
 if __name__ == '__main__':
+	init()
 	main()
