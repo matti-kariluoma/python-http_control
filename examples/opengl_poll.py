@@ -28,7 +28,7 @@ def main():
 	gl.glEnable(gl.GL_CULL_FACE)
 	gl.glEnable(gl.GL_DEPTH_TEST)
 	lights()
-	glut.glutDisplayFunc(display)
+	glut.glutDisplayFunc(display_then_poll)
 	glut.glutKeyboardFunc(keyboard)
 	http_server.register('cam_x', cam_x)
 	http_server.register('cam_y', cam_y)
@@ -36,6 +36,10 @@ def main():
 	http_server.start()
 	glut.glutMainLoop()
 	return
+
+def display_then_poll():
+	display()
+	glut.glutPostRedisplay()
 
 if __name__ == '__main__':
 	main()
