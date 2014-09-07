@@ -76,6 +76,11 @@ class Handler(BaseHTTPRequestHandler):
 '''
 	_checkbox_input = '''<p><input type='checkbox' name='{name}' {checked}></input></p>
 '''
+	_int_input = '''<p><input type='number' name='{name}' step='1'></input></p>
+'''
+	# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
+	_float_input = '''<p><input type='number' name='{name}' step='any'></input></p>
+'''
 	_html_form = '''<form method='POST'>
 {inputs}
 <p><input type='submit'></input></p>

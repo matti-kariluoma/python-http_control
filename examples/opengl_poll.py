@@ -2,9 +2,7 @@
 # coding: utf-8
 '''
 http_control demo: control an OpenGL application with keyboard or http.
-
-Setup and other bits from: 
-http://code.activestate.com/recipes/325391-open-a-glut-window-and-draw-a-sphere-using-pythono/
+This one constantly refreshes the screen.
 
 :copyright: 2014 Matti Kariluoma <matti@kariluo.ma>
 :license: MIT @see LICENSE
