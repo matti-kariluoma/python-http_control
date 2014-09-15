@@ -68,18 +68,18 @@ class Handler(BaseHTTPRequestHandler):
  \t%s
 ''' % '\n\t'.join([str(t) for t in supported_types])
 	
-	_label = '''<p>Current value for "{name}": {actual_value}</p>
-<p>Most recent entered value for "{name}": {our_value}</p>
-<p><label for='{name}'>Enter a new value for "{name}": </label></p>
+	_label = '''<h3>{name}</h3>
+<p>Currently: {actual_value} Recent input: {our_value}</p>
+<p><label for='{name}'>Enter a new value: </label>
 '''
-	_text_input = '''<p><input type='text' name='{name}' placeholder='{actual_value}'></input></p>
+	_text_input = '''<input type='text' name='{name}' placeholder='{actual_value}'></input></p>
 '''
-	_checkbox_input = '''<p><input type='checkbox' name='{name}' {checked}></input></p>
+	_checkbox_input = '''<input type='checkbox' name='{name}' {checked}></input></p>
 '''
-	_int_input = '''<p><input type='number' name='{name}' placeholder='{actual_value}' step='1'></input></p>
+	_int_input = '''<input type='number' name='{name}' placeholder='{actual_value}' step='1'></input></p>
 '''
 	# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
-	_float_input = '''<p><input type='number' name='{name}' placeholder='{actual_value}' step='any'></input></p>
+	_float_input = '''<input type='number' name='{name}' placeholder='{actual_value}' step='any'></input></p>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -88,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
 '''
 	_html_page = '''<html><body>
 {form}
-<p>Last system contact: {contact}</p>
+<p>Application last contacted: {contact}</p>
 <p>System messages:</p>
 <p>{messages}</p>
 </body></html>'''
