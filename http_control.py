@@ -506,7 +506,7 @@ def demo():
 			l = http_control_server.get('l')
 			f = http_control_server.get('f')
 			loa = http_control_server.get('loa')
-			loa = http_control_server.get('doa')
+			doa = http_control_server.get('doa')
 		debug('msg: ', msg, '\nread_only: ', read_only, '\nrunning: ', running)
 	except KeyboardInterrupt:
 		pass
