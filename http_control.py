@@ -43,7 +43,7 @@ except ImportError:
 	zeroconf = None
 	netifaces = None
 
-__version__ = '0.5'
+__version__ = '0.6'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
