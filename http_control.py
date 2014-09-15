@@ -61,6 +61,8 @@ def _warning(*objs):
 	return msg
 
 class Handler(BaseHTTPRequestHandler):
+	_messages = []
+	_messages_max_length = 255
 	supported_types = [bool, int, long, float, str, unicode]
 	_type_not_implemented_msg = '''
  {0} not supported.
@@ -94,13 +96,20 @@ class Handler(BaseHTTPRequestHandler):
 </body></html>'''
 	
 	@classmethod
-	def _set_state(cls, registry, messages):
+	def warning(cls, *objs):
+		# TODO: don't display the same error over and over again
+		msg = _warning(*objs)
+		cls._messages.append(msg)
+		if len(cls._messages) > cls._messages_max_length:
+			cls._messages.pop(0) # remove oldest
+	
+	@classmethod
+	def _set_state(cls, registry):
 		'''
 		Sets the state of this class. All future instantiations (i.e.
 		future HTTP requests) will reference this state.
 		'''
 		cls.registry = registry
-		cls.messages = messages
 	
 	@classmethod
 	def _last_contacted(cls, last_contacted):
@@ -170,7 +179,7 @@ class Handler(BaseHTTPRequestHandler):
 							(datetime.datetime.now() - cls.last_contacted).seconds,
 							self.last_contacted
 						),
-					messages=''.join(['<p>{0}</p>'.format(msg) for msg in cls.messages])
+					messages=''.join(['<p>{0}</p>'.format(msg) for msg in cls._messages])
 				))
 		 
 	def _parse_POST(self):
@@ -202,7 +211,10 @@ class Handler(BaseHTTPRequestHandler):
 					if not sys.version.startswith('3') and type_ is str:
 						str_ = str_.encode('ascii', 'replace')
 					if str_ != '':
-						cls.registry[name] = (object_, type_, type_(str_))
+						try:
+							cls.registry[name] = (object_, type_, type_(str_))
+						except ValueError as e:
+							cls.warning(e)
 			elif type_ is bool:
 				if name in post:
 					cls.registry[name] = (object_, type_, type_(True))
@@ -234,7 +246,6 @@ class _httpd_Thread(threading.Thread):
 		self.httpd.socket.close()
 
 class Server():
-	messages_max_length = 255
 	def __init__(
 			self, 
 			host='0.0.0.0', 
@@ -272,15 +283,11 @@ class Server():
 		else:
 			self.service_name = service_name
 		self.registry = {}
-		self.messages = []
 		self.request_handler.set_updated(False)
 	
 	def warning(self, *objs):
-		# TODO: don't display the same error over and over again
-		msg = _warning(*objs)
-		self.messages.append(msg)
-		if len(self.messages) > self.__class__.messages_max_length:
-			self.messages.pop(0) # remove oldest
+		if self.request_handler:
+			request_handler._warning(objs)
 	
 	def updated(self):
 		return self.request_handler.updated()
@@ -314,7 +321,7 @@ class Server():
 				address when advertising this service ( 192.168.x , 172.16.x, 
 				or 10.x )
 		'''
-		self.request_handler._set_state(self.registry, self.messages) # pass reference
+		self.request_handler._set_state(self.registry) # pass reference
 		self.request_handler._last_contacted(datetime.datetime.now())
 		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
 		self.httpd.start()
