@@ -43,7 +43,7 @@ except ImportError:
 	zeroconf = None
 	netifaces = None
 
-__version__ = '0.6'
+__version__ = '0.7'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
@@ -63,7 +63,7 @@ def _warning(*objs):
 class Handler(BaseHTTPRequestHandler):
 	_messages = []
 	_messages_max_length = 255
-	supported_types = [bool, int, long, float, str, unicode]
+	supported_types = [bool, int, long, float, str, unicode, list]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
@@ -74,6 +74,11 @@ class Handler(BaseHTTPRequestHandler):
 	<p>Currently: {actual_value} Recent input: {our_value}</p>
 	<p><label for='{name}'>Enter a new value: </label>
 '''
+	_list_label = '''<h3>{name}</h3>
+	<p>Currently: <textarea rows='5' readonly>{actual_value}</textarea>
+	Recent input: <textarea rows='5' readonly>{our_value}</textarea></p>
+	<p><label for='{name}'>Enter a new value: </label>
+'''
 	_text_input = '''	<input type='text' name='{name}' placeholder='{actual_value}'></input></p>
 '''
 	_checkbox_input = '''	<input type='checkbox' name='{name}' {checked}></input></p>
@@ -82,6 +87,8 @@ class Handler(BaseHTTPRequestHandler):
 '''
 	# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
 	_float_input = '''	<input type='number' name='{name}' placeholder='{actual_value}' step='any'></input></p>
+'''
+	_list_input = '''	<textarea name='{name}' rows='5'>{our_value}</textarea>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -126,7 +133,10 @@ class Handler(BaseHTTPRequestHandler):
 			return True
 		else:
 			return False
-
+	
+	def _format_list(self, list_):
+		return '\n'.join([unicode(item) for item in list_])
+	
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
@@ -143,6 +153,13 @@ class Handler(BaseHTTPRequestHandler):
 					inputs.append(cls._float_input.format(name=name, actual_value=object_))
 				else:
 					inputs.append(cls._text_input.format(name=name, actual_value=object_))
+			elif type_ is list:
+				inputs.append(cls._list_label.format(
+						name=name,
+						actual_value=self._format_list(object_), 
+						our_value=self._format_list(copy_)
+					))
+				inputs.append(cls._list_input.format(name=name, our_value=self._format_list(copy_)))
 			elif type_ is bool:
 				checked = ''
 				if bool(object_):
@@ -204,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
 		cls.set_updated(True)
 		post = self._parse_POST()
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
-			if type_ in (int, long, float, str, unicode):
+			if type_ in (int, long, float, str, unicode, list):
 				if name in post:
 					list_ = post[name]
 					str_ = list_[-1].decode('utf-8')
@@ -212,7 +229,10 @@ class Handler(BaseHTTPRequestHandler):
 						str_ = str_.encode('ascii', 'replace')
 					if str_ != '':
 						try:
-							cls.registry[name] = (object_, type_, type_(str_))
+							if type_ is list:
+								cls.registry[name] = (object_, type_, str_.split('\n'))
+							else:
+								cls.registry[name] = (object_, type_, type_(str_))
 						except ValueError as e:
 							cls.warning(e)
 			elif type_ is bool:
@@ -423,6 +443,7 @@ def demo():
 	i = 0
 	l = long(1)
 	f = 2.0
+	loa = ['lists will always be', 'returned as strings.', 'Your application must', 'parse them']
 	http_control_server = Server()
 	http_control_server.register('running', running)
 	http_control_server.register('read_only', read_only)
@@ -433,6 +454,7 @@ def demo():
 	http_control_server.register('i', i)
 	http_control_server.register('l', l)
 	http_control_server.register('f', f)
+	http_control_server.register('loa', loa)
 	http_control_server.warning('example warning')
 	try:
 		while running:
@@ -444,6 +466,7 @@ def demo():
 			i = http_control_server.get('i')
 			l = http_control_server.get('l')
 			f = http_control_server.get('f')
+			loa = http_control_server.get('loa')
 		debug('msg: ', msg, '\nread_only: ', read_only, '\nrunning: ', running)
 	except KeyboardInterrupt:
 		pass
