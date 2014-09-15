@@ -72,14 +72,14 @@ class Handler(BaseHTTPRequestHandler):
 <p>Most recent entered value for "{name}": {our_value}</p>
 <p><label for='{name}'>Enter a new value for "{name}": </label></p>
 '''
-	_text_input = '''<p><input type='text' name='{name}'></input></p>
+	_text_input = '''<p><input type='text' name='{name}' placeholder='{actual_value}'></input></p>
 '''
 	_checkbox_input = '''<p><input type='checkbox' name='{name}' {checked}></input></p>
 '''
-	_int_input = '''<p><input type='number' name='{name}' step='1'></input></p>
+	_int_input = '''<p><input type='number' name='{name}' placeholder='{actual_value}' step='1'></input></p>
 '''
 	# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
-	_float_input = '''<p><input type='number' name='{name}' step='any'></input></p>
+	_float_input = '''<p><input type='number' name='{name}' placeholder='{actual_value}' step='any'></input></p>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -128,7 +128,12 @@ class Handler(BaseHTTPRequestHandler):
 						actual_value=unicode(object_), 
 						our_value=unicode(copy_)
 					))
-				inputs.append(cls._text_input.format(name=name))
+				if type_ is int or type_ is long:
+					inputs.append(cls._int_input.format(name=name, actual_value=object_))
+				elif type_ is float:
+					inputs.append(cls._float_input.format(name=name, actual_value=object_))
+				else:
+					inputs.append(cls._text_input.format(name=name, actual_value=object_))
 			elif type_ is bool:
 				checked = ''
 				if bool(object_):
