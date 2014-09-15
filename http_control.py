@@ -227,12 +227,11 @@ class Handler(BaseHTTPRequestHandler):
 					str_ = list_[-1].decode('utf-8')
 					if not sys.version.startswith('3') and type_ is str:
 						str_ = str_.encode('ascii', 'replace')
+					if type_ is list:
+						cls.registry[name] = (object_, type_, str_.split('\n'))
 					if str_ != '':
 						try:
-							if type_ is list:
-								cls.registry[name] = (object_, type_, str_.split('\n'))
-							else:
-								cls.registry[name] = (object_, type_, type_(str_))
+							cls.registry[name] = (object_, type_, type_(str_))
 						except ValueError as e:
 							cls.warning(e)
 			elif type_ is bool:
