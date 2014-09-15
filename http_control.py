@@ -43,7 +43,7 @@ except ImportError:
 	zeroconf = None
 	netifaces = None
 
-__version__ = '0.7'
+__version__ = '0.8'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
@@ -63,7 +63,7 @@ def _warning(*objs):
 class Handler(BaseHTTPRequestHandler):
 	_messages = []
 	_messages_max_length = 255
-	supported_types = [bool, int, long, float, str, unicode, list]
+	supported_types = [bool, int, long, float, str, unicode, list, dict]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
@@ -79,6 +79,13 @@ class Handler(BaseHTTPRequestHandler):
 	Recent input: <textarea rows='5' readonly>{our_value}</textarea></p>
 	<p><label for='{name}'>Enter a new value: </label>
 '''
+	_dict_label = '''<h3>{name}</h3>
+	<p>Currently: <textarea rows='5' readonly>{actual_keys}</textarea>
+	<textarea rows='5' readonly>{actual_values}</textarea>
+	Recent input: <textarea rows='5' readonly>{our_keys}</textarea>
+	<textarea rows='5' readonly>{our_values}</textarea></p>
+	<p><label for='{name}'>Enter a new value: </label>
+'''
 	_text_input = '''	<input type='text' name='{name}' placeholder='{actual_value}'></input></p>
 '''
 	_checkbox_input = '''	<input type='checkbox' name='{name}' {checked}></input></p>
@@ -89,6 +96,9 @@ class Handler(BaseHTTPRequestHandler):
 	_float_input = '''	<input type='number' name='{name}' placeholder='{actual_value}' step='any'></input></p>
 '''
 	_list_input = '''	<textarea name='{name}' rows='5'>{our_value}</textarea>
+'''
+	_dict_input = '''	<textarea name='{name}_keys' rows='5'>{our_keys}</textarea>
+	<textarea name='{name}_values' rows='5'>{our_values}</textarea>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -137,6 +147,12 @@ class Handler(BaseHTTPRequestHandler):
 	def _format_list(self, list_):
 		return '\n'.join([unicode(item) for item in list_])
 	
+	def _format_dict(self, dict_):
+		return (
+				'\n'.join(str(key) for key in dict_.keys()), 
+				'\n'.join(str(key) for key in dict_.values())
+			)
+	
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
@@ -160,6 +176,17 @@ class Handler(BaseHTTPRequestHandler):
 						our_value=self._format_list(copy_)
 					))
 				inputs.append(cls._list_input.format(name=name, our_value=self._format_list(copy_)))
+			elif type_ is dict:
+				akeys, avalues = self._format_dict(object_)
+				okeys, ovalues = self._format_dict(copy_)
+				inputs.append(cls._dict_label.format(
+						name=name,
+						actual_keys=akeys,
+						actual_values=avalues,
+						our_keys=okeys,
+						our_values=ovalues
+					))
+				inputs.append(cls._dict_input.format(name=name, our_keys=okeys, our_values=ovalues))
 			elif type_ is bool:
 				checked = ''
 				if bool(object_):
@@ -221,8 +248,19 @@ class Handler(BaseHTTPRequestHandler):
 		cls.set_updated(True)
 		post = self._parse_POST()
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
-			if type_ in (int, long, float, str, unicode, list):
-				if name in post:
+			if type_ in (int, long, float, str, unicode, list, dict):
+				if type_ is dict:
+					post_keys = '{0}_keys'.format(name)
+					post_values = '{0}_values'.format(name)
+					if post_keys in post and post_values in post:
+						list_ = post[post_keys]
+						str_keys = list_[-1].decode('utf-8')
+						list_ = post[post_values]
+						str_values = list_[-1].decode('utf-8')
+						keys = str_keys.split('\n')
+						values = str_values.split('\n')
+						cls.registry[name] = (object_, type_, dict(zip(keys, values)))
+				elif name in post:
 					list_ = post[name]
 					str_ = list_[-1].decode('utf-8')
 					if not sys.version.startswith('3') and type_ is str:
@@ -443,6 +481,7 @@ def demo():
 	l = long(1)
 	f = 2.0
 	loa = ['lists will always be', 'returned as strings.', 'Your application must', 'parse them']
+	doa = {'same': 'for dictionaries.', 'They must': 'also be parsed'}
 	http_control_server = Server()
 	http_control_server.register('running', running)
 	http_control_server.register('read_only', read_only)
@@ -454,6 +493,7 @@ def demo():
 	http_control_server.register('l', l)
 	http_control_server.register('f', f)
 	http_control_server.register('loa', loa)
+	http_control_server.register('doa', doa)
 	http_control_server.warning('example warning')
 	try:
 		while running:
@@ -466,6 +506,7 @@ def demo():
 			l = http_control_server.get('l')
 			f = http_control_server.get('f')
 			loa = http_control_server.get('loa')
+			loa = http_control_server.get('doa')
 		debug('msg: ', msg, '\nread_only: ', read_only, '\nrunning: ', running)
 	except KeyboardInterrupt:
 		pass
