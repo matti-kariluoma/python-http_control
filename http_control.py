@@ -287,7 +287,7 @@ class Server():
 	
 	def warning(self, *objs):
 		if self.request_handler:
-			request_handler._warning(objs)
+			self.request_handler._warning(objs)
 	
 	def updated(self):
 		return self.request_handler.updated()
