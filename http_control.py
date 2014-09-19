@@ -418,6 +418,9 @@ class Server():
 			self.zeroconf = None
 	
 	def register(self, name, object_, type_=None):
+		#https://docs.python.org/2/library/weakref.html#weakref.ref
+		#https://docs.python.org/2/library/sys.html#sys.getrefcount
+		#https://docs.python.org/2/library/gc.html#gc.get_referrers
 		'''
 		register a state variable with this server.
 		
