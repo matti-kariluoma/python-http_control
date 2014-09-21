@@ -63,7 +63,7 @@ def _warning(*objs):
 class Handler(BaseHTTPRequestHandler):
 	_messages = []
 	_messages_max_length = 255
-	supported_types = [bool, int, long, float, str, unicode, list, dict]
+	supported_types = [bool, int, long, float, str, unicode, tuple, list, dict]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
@@ -169,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
 					inputs.append(cls._float_input.format(name=name, actual_value=object_))
 				else:
 					inputs.append(cls._text_input.format(name=name, actual_value=object_))
-			elif type_ is list:
+			elif type_ in (tuple, list):
 				inputs.append(cls._list_label.format(
 						name=name,
 						actual_value=self._format_list(object_), 
@@ -248,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
 		cls.set_updated(True)
 		post = self._parse_POST()
 		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
-			if type_ in (int, long, float, str, unicode, list, dict):
+			if type_ in (int, long, float, str, unicode, tuple, list, dict):
 				if type_ is dict:
 					post_keys = '{0}_keys'.format(name)
 					post_values = '{0}_values'.format(name)
@@ -265,7 +265,8 @@ class Handler(BaseHTTPRequestHandler):
 					str_ = list_[-1].decode('utf-8')
 					if not sys.version.startswith('3') and type_ is str:
 						str_ = str_.encode('ascii', 'replace')
-					if type_ is list:
+					if type_ in (tuple, list):
+						#TODO saw wierd behaviorwhen using mobile client
 						cls.registry[name] = (object_, type_, str_.split('\n'))
 					if str_ != '':
 						try:
@@ -476,6 +477,12 @@ class Server():
 def demo():
 	import time
 	debug('http_control version %s' % __version__)
+	if len(sys.argv) > 1:
+		try:
+			port = int(sys.argv[1])
+		except ValueError:
+			print('Usage: {0} port'.format(sys.argv[0]), file=sys.stderr)
+			return 1
 	running = True
 	read_only = 'the server will copy your data, but only you can overwrite it'
 	msg = str('you can register before or after starting the server')
@@ -484,8 +491,12 @@ def demo():
 	l = long(1)
 	f = 2.0
 	loa = ['lists will always be', 'returned as strings.', 'Your application must', 'parse them']
+	toa = ('tuples are', 'treated like', 'lists, but', 'returned as a tuple')
 	doa = {'same': 'for dictionaries.', 'They must': 'also be parsed'}
-	http_control_server = Server()
+	if port:
+		http_control_server = Server(port=port)
+	else:
+		http_control_server = Server()
 	http_control_server.register('running', running)
 	http_control_server.register('read_only', read_only)
 	http_control_server.start()
@@ -496,6 +507,7 @@ def demo():
 	http_control_server.register('l', l)
 	http_control_server.register('f', f)
 	http_control_server.register('loa', loa)
+	http_control_server.register('toa', toa)
 	http_control_server.register('doa', doa)
 	http_control_server.warning('example warning')
 	try:
@@ -509,12 +521,16 @@ def demo():
 			l = http_control_server.get('l')
 			f = http_control_server.get('f')
 			loa = http_control_server.get('loa')
+			toa = http_control_server.get('toa')
 			doa = http_control_server.get('doa')
 		debug('msg: ', msg, '\nread_only: ', read_only, '\nrunning: ', running)
 	except KeyboardInterrupt:
 		pass
 	finally:
 		http_control_server.stop()
+	return 0
 	
 if __name__ == '__main__':
-	demo()
+	exit_code = demo()
+	if exit_code != 0:
+		sys.exit(exit_code)
