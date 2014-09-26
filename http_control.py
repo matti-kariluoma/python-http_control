@@ -477,6 +477,7 @@ class Server():
 def demo():
 	import time
 	debug('http_control version %s' % __version__)
+	port = None
 	if len(sys.argv) > 1:
 		try:
 			port = int(sys.argv[1])
