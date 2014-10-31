@@ -325,13 +325,13 @@ class Server():
 		'''
 		self.host = host
 		self.port = port
-		now = datetime.datetime.now()
+		now = datetime.datetime.now().strftime('%s')
 		if request_handler is None:
 			# create a new derived class
-			unique_name = 'Handler_%s' % now 
+			unique_name = 'Handler_%s' % now
 			unique_name = unique_name.replace(' ', '_')
 			self.request_handler = type(str(unique_name), (Handler, object), {})
-			debug('New Handler created: ', self.request_handler)
+			debug('New Handler created: ', unique_name, self.request_handler)
 		else:
 			self.request_handler = request_handler
 		self.zeroconf_disabled = zeroconf_disabled
