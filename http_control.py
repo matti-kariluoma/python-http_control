@@ -6,16 +6,12 @@ variables to be exposed to clients over HTTP + HTML. The HTML is
 automatically generated from the number and type of registered state 
 variables.
 
-This module keeps track of a reference to the application's state 
-variables, but only accesses them in a read-only manner.
-
 After .start() is called, an http server is started in a thread. A
 web browser may then visit this server and provide new values for
 the application's registered state variables.
 
 It is the application's responsibility to use the .get() interface
-to update its own internal state. This module will never attempt to
-write to any of the registered state variables.
+to update its own internal state.
 
 :copyright: 2014 Matti Kariluoma <matti@kariluo.ma>
 :license: MIT @see LICENSE
@@ -43,7 +39,7 @@ except ImportError:
 	zeroconf = None
 	netifaces = None
 
-__version__ = '0.8'
+__version__ = '0.9'
 
 def debug(*objs):
 	# thanks http://stackoverflow.com/a/14981125
@@ -71,34 +67,31 @@ class Handler(BaseHTTPRequestHandler):
 ''' % '\n\t'.join([str(t) for t in supported_types])
 	
 	_label = '''<h3>{name}</h3>
-	<p>Currently: {actual_value} Recent input: {our_value}</p>
+	<p>Last known value: {value}</p>
 	<p><label for='{name}'>Enter a new value: </label>
 '''
 	_list_label = '''<h3>{name}</h3>
-	<p>Currently: <textarea rows='5' readonly>{actual_value}</textarea>
-	Recent input: <textarea rows='5' readonly>{our_value}</textarea></p>
+	<p>Last known value: <textarea rows='5' readonly>{value}</textarea></p>
 	<p><label for='{name}'>Enter a new value: </label>
 '''
 	_dict_label = '''<h3>{name}</h3>
-	<p>Currently: <textarea rows='5' readonly>{actual_keys}</textarea>
-	<textarea rows='5' readonly>{actual_values}</textarea>
-	Recent input: <textarea rows='5' readonly>{our_keys}</textarea>
-	<textarea rows='5' readonly>{our_values}</textarea></p>
+	<p>Last known value: <textarea rows='5' readonly>{keys}</textarea>
+	<textarea rows='5' readonly>{values}</textarea></p>
 	<p><label for='{name}'>Enter a new value: </label>
 '''
-	_text_input = '''	<input type='text' name='{name}' placeholder='{actual_value}'></input></p>
+	_text_input = '''	<input type='text' name='{name}' placeholder='{value}'></input></p>
 '''
 	_checkbox_input = '''	<input type='checkbox' name='{name}' {checked}></input></p>
 '''
-	_int_input = '''	<input type='number' name='{name}' placeholder='{actual_value}' step='1'></input></p>
+	_int_input = '''	<input type='number' name='{name}' placeholder='{value}' step='1'></input></p>
 '''
 	# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
-	_float_input = '''	<input type='number' name='{name}' placeholder='{actual_value}' step='any'></input></p>
+	_float_input = '''	<input type='number' name='{name}' placeholder='{value}' step='any'></input></p>
 '''
-	_list_input = '''	<textarea name='{name}' rows='5'>{our_value}</textarea>
+	_list_input = '''	<textarea name='{name}' rows='5'>{value}</textarea>
 '''
-	_dict_input = '''	<textarea name='{name}_keys' rows='5'>{our_keys}</textarea>
-	<textarea name='{name}_values' rows='5'>{our_values}</textarea>
+	_dict_input = '''	<textarea name='{name}_keys' rows='5'>{keys}</textarea>
+	<textarea name='{name}_values' rows='5'>{values}</textarea>
 '''
 	_html_form = '''<form method='POST'>
 {inputs}
@@ -150,51 +143,45 @@ class Handler(BaseHTTPRequestHandler):
 	def _format_dict(self, dict_):
 		return (
 				'\n'.join(str(key) for key in dict_.keys()), 
-				'\n'.join(str(key) for key in dict_.values())
+				'\n'.join(str(value) for value in dict_.values())
 			)
 	
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
-		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
+		for (name, (object_, type_)) in sorted(cls.registry.items()):
 			if type_ in (int, long, float, str, unicode):
 				inputs.append(cls._label.format(
 						name=name,
-						actual_value=unicode(object_), 
-						our_value=unicode(copy_)
+						value=unicode(object_)
 					))
 				if type_ is int or type_ is long:
-					inputs.append(cls._int_input.format(name=name, actual_value=object_))
+					inputs.append(cls._int_input.format(name=name, value=object_))
 				elif type_ is float:
-					inputs.append(cls._float_input.format(name=name, actual_value=object_))
+					inputs.append(cls._float_input.format(name=name, value=object_))
 				else:
-					inputs.append(cls._text_input.format(name=name, actual_value=object_))
+					inputs.append(cls._text_input.format(name=name, value=object_))
 			elif type_ in (tuple, list):
 				inputs.append(cls._list_label.format(
 						name=name,
-						actual_value=self._format_list(object_), 
-						our_value=self._format_list(copy_)
+						value=self._format_list(object_)
 					))
-				inputs.append(cls._list_input.format(name=name, our_value=self._format_list(copy_)))
+				inputs.append(cls._list_input.format(name=name, value=self._format_list(copy_)))
 			elif type_ is dict:
-				akeys, avalues = self._format_dict(object_)
-				okeys, ovalues = self._format_dict(copy_)
+				keys, values = self._format_dict(object_)
 				inputs.append(cls._dict_label.format(
 						name=name,
-						actual_keys=akeys,
-						actual_values=avalues,
-						our_keys=okeys,
-						our_values=ovalues
+						keys=keys,
+						values=values
 					))
-				inputs.append(cls._dict_input.format(name=name, our_keys=okeys, our_values=ovalues))
+				inputs.append(cls._dict_input.format(name=name, keys=keys, values=values))
 			elif type_ is bool:
 				checked = ''
 				if bool(object_):
 					checked = 'checked'
 				inputs.append(cls._label.format(
 						name=name,
-						actual_value=unicode(object_), 
-						our_value=unicode(copy_)
+						value=unicode(object_)
 					))
 				inputs.append(cls._checkbox_input.format(
 						name=name,
@@ -247,7 +234,7 @@ class Handler(BaseHTTPRequestHandler):
 		cls = self.__class__
 		cls.set_updated(True)
 		post = self._parse_POST()
-		for (name, (object_, type_, copy_)) in sorted(cls.registry.items()):
+		for (name, (object_, type_)) in sorted(cls.registry.items()):
 			if type_ in (int, long, float, str, unicode, tuple, list, dict):
 				if type_ is dict:
 					post_keys = '{0}_keys'.format(name)
@@ -259,7 +246,7 @@ class Handler(BaseHTTPRequestHandler):
 						str_values = list_[-1].decode('utf-8')
 						keys = str_keys.split('\n')
 						values = str_values.split('\n')
-						cls.registry[name] = (object_, type_, dict(zip(keys, values)))
+						cls.registry[name] = (dict(zip(keys, values)), type_)
 				elif name in post:
 					list_ = post[name]
 					str_ = list_[-1].decode('utf-8')
@@ -267,17 +254,17 @@ class Handler(BaseHTTPRequestHandler):
 						str_ = str_.encode('ascii', 'replace')
 					if type_ in (tuple, list):
 						#TODO saw wierd behaviorwhen using mobile client
-						cls.registry[name] = (object_, type_, str_.split('\n'))
+						cls.registry[name] = (str_.split('\n'), type_)
 					if str_ != '':
 						try:
-							cls.registry[name] = (object_, type_, type_(str_))
+							cls.registry[name] = (type_(str_), type_)
 						except ValueError as e:
 							cls.warning(e)
 			elif type_ is bool:
 				if name in post:
-					cls.registry[name] = (object_, type_, type_(True))
+					cls.registry[name] = (type_(True), type_)
 				else:
-					cls.registry[name] = (object_, type_, type_(False))
+					cls.registry[name] = (type_(False), type_)
 			else:
 				raise NotImplementedError(cls._type_not_implemented_msg.format(type_))
 			
@@ -307,7 +294,7 @@ class Server():
 	def __init__(
 			self, 
 			host='0.0.0.0', 
-			port=8080, 
+			port=8000, 
 			request_handler=None, 
 			zeroconf_disabled=False, 
 			service_name=None
@@ -419,9 +406,6 @@ class Server():
 			self.zeroconf = None
 	
 	def register(self, name, object_, type_=None):
-		#https://docs.python.org/2/library/weakref.html#weakref.ref
-		#https://docs.python.org/2/library/sys.html#sys.getrefcount
-		#https://docs.python.org/2/library/gc.html#gc.get_referrers
 		'''
 		register a state variable with this server.
 		
@@ -434,9 +418,7 @@ class Server():
 			type_ = type(object_)
 		if type_ not in self.request_handler.supported_types:
 			raise NotImplementedError(self.request_handler._type_not_implemented_msg.format(type_))
-		# TODO: test/ensure object_ is stored as a reference
-		# TODO: consider a class for registry objects, rather than tuples
-		self.registry[name] = (object_, type_, copy.deepcopy(object_))
+		self.registry[name] = (object_, type_)
 	
 	def unregister(self, name):
 		if name in self.registry:
@@ -444,87 +426,48 @@ class Server():
 		else:
 			self.warning('''{name} isn't registered! Not able to unregister {name}.'''.format(name=name))
 	
-	def get_internal_copy(self, name):
+	def get(self, name):
 		'''
-		fetch the (possibly updated) value of 'name'.
-		
-		if using the pattern:
-				val = this.get_internal_copy("val")
-		please note that you have overwritten your application's reference
-		to `val'. You will then need to call
-				this.register('val', val)
-		This 'get and set' pattern is provided in the convienence function 'get'
+		Fetches the (possibly updated) value of 'name', registers it, then 
+		returns the value.
 		'''
 		self.request_handler._last_contacted(datetime.datetime.now())
 		if name in self.registry:
-			(object_, type_, copy_) = self.registry[name]
-			return copy_
+			(object_, type_) = self.registry[name]
+			if object_ is not None:
+				self.register(name, object_, type_)
+			return object_
 		else:
 			self.warning('''{name} isn't registered! Returning None.'''.format(name=name))
 			return None
-	
-	def get(self, name):
-		'''
-		A convenience wrapper for 'get_internal_copy'.
-		
-		Fetches the value of 'name', registers it, then returns the value.
-		'''
-		copy_ = self.get_internal_copy(name)
-		if copy_ is not None:
-			self.register(name, copy_)
-		return copy_
 
-def demo():
+def test():
 	import time
 	debug('http_control version %s' % __version__)
+	## parse command line
 	port = None
 	if len(sys.argv) > 1:
 		try:
 			port = int(sys.argv[1])
 		except ValueError:
-			print('Usage: {0} port'.format(sys.argv[0]), file=sys.stderr)
-			return 1
-	running = True
-	read_only = 'the server will copy your data, but only you can overwrite it'
-	msg = str('you can register before or after starting the server')
-	umsg = unicode('les derrières')
-	i = 0
-	l = long(1)
-	f = 2.0
-	loa = ['lists will always be', 'returned as strings.', 'Your application must', 'parse them']
-	toa = ('tuples are', 'treated like', 'lists, but', 'returned as a tuple')
-	doa = {'same': 'for dictionaries.', 'They must': 'also be parsed'}
+			port = None
 	if port:
 		http_control_server = Server(port=port)
 	else:
 		http_control_server = Server()
-	http_control_server.register('running', running)
-	http_control_server.register('read_only', read_only)
 	http_control_server.start()
-	debug('are we threaded?')
+	sockname = (http_control_server.host, http_control_server.port)
+	info("Serving HTTP on {0} port {1}...".format(*sockname))
+	## setup Server
+	running = True
+	msg = "Hello world!"
+	http_control_server.register('running', running)
 	http_control_server.register('msg', msg)
-	http_control_server.register('umsg', umsg)
-	http_control_server.register('i', i)
-	http_control_server.register('l', l)
-	http_control_server.register('f', f)
-	http_control_server.register('loa', loa)
-	http_control_server.register('toa', toa)
-	http_control_server.register('doa', doa)
-	http_control_server.warning('example warning')
 	try:
 		while running:
-			time.sleep(0.1)
 			running = http_control_server.get('running')
-			_  = http_control_server.get_internal_copy('read_only')
 			msg = http_control_server.get('msg')
-			umsg = http_control_server.get('umsg')
-			i = http_control_server.get('i')
-			l = http_control_server.get('l')
-			f = http_control_server.get('f')
-			loa = http_control_server.get('loa')
-			toa = http_control_server.get('toa')
-			doa = http_control_server.get('doa')
-		debug('msg: ', msg, '\nread_only: ', read_only, '\nrunning: ', running)
+		debug('msg: ', msg, '\nrunning: ', running)
 	except KeyboardInterrupt:
 		pass
 	finally:
@@ -532,6 +475,4 @@ def demo():
 	return 0
 	
 if __name__ == '__main__':
-	exit_code = demo()
-	if exit_code != 0:
-		sys.exit(exit_code)
+	sys.exit(test())
