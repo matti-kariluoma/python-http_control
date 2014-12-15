@@ -17,7 +17,7 @@ to update its own internal state.
 :license: MIT @see LICENSE
 '''
 from __future__ import print_function, unicode_literals
-import sys, datetime, threading, copy
+import sys, datetime, threading
 if sys.version.startswith('3'):
 	from urllib.parse import parse_qs
 	from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -40,26 +40,29 @@ except ImportError:
 	netifaces = None
 
 __version__ = '0.9'
+__debug__http_control__ = True
+
+def _stderr(*objs):
+	# thanks http://stackoverflow.com/a/14981125
+	print(*objs, file=sys.stderr)
 
 def debug(*objs):
-	# thanks http://stackoverflow.com/a/14981125
-	print('DEBUG: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
+	if __debug__http_control__:
+		_stderr('DEBUG: %s\n' % datetime.datetime.now(), *objs)
 
 def info(*objs):
-	print('INFO: %s\n' % datetime.datetime.now(), *objs, file=sys.stderr)
-
-def _warning(*objs):
-	str_buf = StringIO.StringIO()
-	print('WARN: %s\n' % datetime.datetime.now(), *objs, file=str_buf)
-	msg = str_buf.getvalue()
-	str_buf.close()
-	print(msg, file=sys.stderr)
-	return msg
+	_stderr('INFO: %s\n' % datetime.datetime.now(), *objs)
 
 class Handler(BaseHTTPRequestHandler):
-	_messages = []
-	_messages_max_length = 255
-	supported_types = [bool, int, long, float, str, unicode, tuple, list, dict]
+	_messages = {}
+	supported_types = (bool, int, long, float, str, unicode, tuple, list, dict)
+	_escapes = (
+			('&', '&apos;'), # '&'  must be first item in this tuple
+			('<', '&lt;'),
+			('>', '&gt;'),
+			('"', '&quot;'),
+			('\'', '&apos;'),
+		)
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
@@ -107,11 +110,19 @@ class Handler(BaseHTTPRequestHandler):
 	
 	@classmethod
 	def warning(cls, *objs):
-		# TODO: don't display the same error over and over again
-		msg = _warning(*objs)
-		cls._messages.append(msg)
-		if len(cls._messages) > cls._messages_max_length:
-			cls._messages.pop(0) # remove oldest
+		str_buf = StringIO.StringIO()
+		print('WARN: ', *objs, file=str_buf)
+		msg = str_buf.getvalue()
+		str_buf.close()
+		_stderr(msg)
+		try:
+			count_time = list(cls._messages[msg])
+			count_time[0] += 1
+			count_time[1] = datetime.datetime.now()
+			count_time = tuple(count_time)
+		except KeyError:
+			count_time = (1, datetime.datetime.now())
+		cls._messages[msg] = count_time
 	
 	@classmethod
 	def _set_state(cls, registry):
@@ -137,7 +148,26 @@ class Handler(BaseHTTPRequestHandler):
 		else:
 			return False
 	
-	def _format_list(self, list_):
+	@classmethod
+	def escape(cls, s):
+		'''
+		cgi.escape isn't very complete
+		'''
+		for char_esc in cls._escapes:
+			s = s.replace(char_esc[0], char_esc[1])
+		return s
+	
+	@classmethod
+	def unescape(cls, e):
+		'''
+		opposite of our escape func
+		'''
+		for char_esc in reversed(cls._escapes):
+			e = e.replace(char_esc[1], char_esc[0])
+		return e
+			
+	
+	def _format_list(cls, list_):
 		return '\n'.join([unicode(item) for item in list_])
 	
 	def _format_dict(self, dict_):
@@ -150,6 +180,7 @@ class Handler(BaseHTTPRequestHandler):
 		cls = self.__class__
 		inputs = []
 		for (name, (object_, type_)) in sorted(cls.registry.items()):
+			name = cls.escape(name)
 			if type_ in (int, long, float, str, unicode):
 				inputs.append(cls._label.format(
 						name=name,
@@ -166,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
 						name=name,
 						value=self._format_list(object_)
 					))
-				inputs.append(cls._list_input.format(name=name, value=self._format_list(copy_)))
+				inputs.append(cls._list_input.format(name=name, value=self._format_list(object_)))
 			elif type_ is dict:
 				keys, values = self._format_dict(object_)
 				inputs.append(cls._dict_label.format(
@@ -210,7 +241,12 @@ class Handler(BaseHTTPRequestHandler):
 							(datetime.datetime.now() - cls.last_contacted).seconds,
 							self.last_contacted
 						),
-					messages=''.join(['<p>{0}</p>'.format(msg) for msg in cls._messages])
+					messages=''.join([
+							'<p>{0} {1} ({2})</p>'.format(msg, count_time[1], count_time[0]) for (msg, count_time) in sorted(
+									cls._messages.items(), 
+									key=lambda (msg, count_time): count_time[1] # sort by message date
+								)
+						]) or '(No system messages)'
 				))
 		 
 	def _parse_POST(self):
@@ -333,6 +369,10 @@ class Server():
 	def warning(self, *objs):
 		if self.request_handler:
 			self.request_handler.warning(*objs)
+	
+	def set_debug(self, should_debug):
+		global __debug__http_control__
+		__debug__http_control__ = should_debug
 	
 	def updated(self):
 		return self.request_handler.updated()
@@ -463,6 +503,9 @@ def test():
 	msg = "Hello world!"
 	http_control_server.register('running', running)
 	http_control_server.register('msg', msg)
+	if __debug__http_control__:
+		for type_ in http_control_server.request_handler.supported_types:
+			http_control_server.register(str(type_), type_())
 	try:
 		while running:
 			running = http_control_server.get('running')
