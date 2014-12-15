@@ -53,9 +53,99 @@ def debug(*objs):
 def info(*objs):
 	_stderr('INFO: %s\n' % datetime.datetime.now(), *objs)
 
+class Type(object):
+	def __init__(self):
+		self.label = "{name} {value}"
+		self.input = "{name} {value}"
+	def format_object(self, object_):
+		return unicode(object_)
+	def format(self, name, object_):
+		return (
+				self.label.format(name=name, value=self.format_object(object_)), 
+				self.input.format(name=name, value=self.format_object(object_))
+			)
+
+class Type_text(Type):
+	def __init__(self):
+		self.label = '''<h3>{name}</h3>
+	<p>Last known value: {value}</p>
+	<p><label for='{name}'>Enter a new value: </label>
+'''
+		self.input = '''	<input type='text' name='{name}' placeholder='{value}'></input></p>
+'''
+
+class Type_bool(Type_text):
+	def __init__(self):
+		super(Type_bool, self).__init__()
+		self.input = '''	<input type='checkbox' name='{name}' {checked}></input></p>
+'''
+	def format_object(self, object_):
+		return 'checked' if bool(object_) else ''
+	def format(self, name, object_):
+		return (
+				self.label.format(name=name, value=unicode(object_)), 
+				self.input.format(name=name, checked=self.format_object(object_))
+			)
+
+class Type_int(Type_text):
+	def __init__(self):
+		super(Type_int, self).__init__()
+		self.input = '''	<input type='number' name='{name}' placeholder='{value}' step='1'></input></p>
+'''
+
+class Type_float(Type_text):
+	def __init__(self):
+		super(Type_float, self).__init__()
+		# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
+		self.input = '''	<input type='number' name='{name}' placeholder='{value}' step='any'></input></p>
+'''
+			
+class Type_list(Type):
+	def __init__(self):
+		self.label = '''<h3>{name}</h3>
+	<p>Last known value: <textarea rows='5' readonly>{value}</textarea></p>
+	<p><label for='{name}'>Enter a new value: </label>
+'''
+		self.input = '''	<textarea name='{name}' rows='5'>{value}</textarea>
+'''
+	def format(self, name, object_):
+		return '\n'.join([unicode(item) for item in object_])
+
+class Type_dict(Type):
+	def __init__(self):
+		self.label = '''<h3>{name}</h3>
+	<p>Last known value: <textarea rows='5' readonly>{keys}</textarea>
+	<textarea rows='5' readonly>{values}</textarea></p>
+	<p><label for='{name}'>Enter a new value: </label>
+'''
+		self.input = '''	<textarea name='{name}_keys' rows='5'>{keys}</textarea>
+	<textarea name='{name}_values' rows='5'>{values}</textarea>
+'''
+	def format_object(self, object_):
+		return (
+			'\n'.join(str(key) for key in object_.keys()), 
+			'\n'.join(str(value) for value in object_.values())
+		)
+	def format(self, name, object_):
+		keys, values = self.format_object(object_)
+		return (
+				self.label.format(name=name, keys=keys, values=values), 
+				self.input.format(name=name, keys=keys, values=values)
+			)
+
 class Handler(BaseHTTPRequestHandler):
 	_messages = {}
-	supported_types = [bool, int, long, float, str, unicode, tuple, list, dict]
+	supported_types = {
+			bool: Type_bool(), 
+			int: Type_int(), 
+			long: Type_int(), 
+			float: Type_float(), 
+			str: Type_text(), 
+			unicode: Type_text(), 
+			tuple: Type_list(), 
+			list: Type_list(), 
+			dict: Type_dict(),
+		}
 	_escapes = [
 			('&', '&apos;'), # '&'  must be first item in this list
 			('<', '&lt;'),
@@ -67,35 +157,8 @@ class Handler(BaseHTTPRequestHandler):
  {0} not supported.
  You will need to manually convert it to and from one of: 
  \t%s
-''' % '\n\t'.join([str(t) for t in supported_types])
-	
-	_label = '''<h3>{name}</h3>
-	<p>Last known value: {value}</p>
-	<p><label for='{name}'>Enter a new value: </label>
-'''
-	_list_label = '''<h3>{name}</h3>
-	<p>Last known value: <textarea rows='5' readonly>{value}</textarea></p>
-	<p><label for='{name}'>Enter a new value: </label>
-'''
-	_dict_label = '''<h3>{name}</h3>
-	<p>Last known value: <textarea rows='5' readonly>{keys}</textarea>
-	<textarea rows='5' readonly>{values}</textarea></p>
-	<p><label for='{name}'>Enter a new value: </label>
-'''
-	_text_input = '''	<input type='text' name='{name}' placeholder='{value}'></input></p>
-'''
-	_checkbox_input = '''	<input type='checkbox' name='{name}' {checked}></input></p>
-'''
-	_int_input = '''	<input type='number' name='{name}' placeholder='{value}' step='1'></input></p>
-'''
-	# thanks http://blog.isotoma.com/2012/03/html5-input-typenumber-and-decimalsfloats-in-chrome/
-	_float_input = '''	<input type='number' name='{name}' placeholder='{value}' step='any'></input></p>
-'''
-	_list_input = '''	<textarea name='{name}' rows='5'>{value}</textarea>
-'''
-	_dict_input = '''	<textarea name='{name}_keys' rows='5'>{keys}</textarea>
-	<textarea name='{name}_values' rows='5'>{values}</textarea>
-'''
+''' % '\n\t'.join([str(t) for t in supported_types.keys()])
+
 	_html_form = '''<form method='POST'>
 {inputs}
 <p><input type='submit'></input></p>
@@ -165,61 +228,17 @@ class Handler(BaseHTTPRequestHandler):
 		for char_esc in reversed(cls._escapes):
 			e = e.replace(char_esc[1], char_esc[0])
 		return e
-			
-	
-	def _format_list(cls, list_):
-		return '\n'.join([unicode(item) for item in list_])
-	
-	def _format_dict(self, dict_):
-		return (
-				'\n'.join(str(key) for key in dict_.keys()), 
-				'\n'.join(str(value) for value in dict_.values())
-			)
-	
+		
 	def _create_form(self):
 		cls = self.__class__
 		inputs = []
 		for (name, (object_, type_)) in sorted(cls.registry.items()):
 			name = cls.escape(name)
-			if type_ in (int, long, float, str, unicode):
-				inputs.append(cls._label.format(
-						name=name,
-						value=unicode(object_)
-					))
-				if type_ is int or type_ is long:
-					inputs.append(cls._int_input.format(name=name, value=object_))
-				elif type_ is float:
-					inputs.append(cls._float_input.format(name=name, value=object_))
-				else:
-					inputs.append(cls._text_input.format(name=name, value=object_))
-			elif type_ in (tuple, list):
-				inputs.append(cls._list_label.format(
-						name=name,
-						value=self._format_list(object_)
-					))
-				inputs.append(cls._list_input.format(name=name, value=self._format_list(object_)))
-			elif type_ is dict:
-				keys, values = self._format_dict(object_)
-				inputs.append(cls._dict_label.format(
-						name=name,
-						keys=keys,
-						values=values
-					))
-				inputs.append(cls._dict_input.format(name=name, keys=keys, values=values))
-			elif type_ is bool:
-				checked = ''
-				if bool(object_):
-					checked = 'checked'
-				inputs.append(cls._label.format(
-						name=name,
-						value=unicode(object_)
-					))
-				inputs.append(cls._checkbox_input.format(
-						name=name,
-						checked=checked
-					))
-			else:
+			try:
+				type_to_html = cls.supported_types[type_]
+			except KeyError:
 				raise NotImplementedError(cls._type_not_implemented_msg.format(type_))
+			inputs.extend(type_to_html.format(name, object_))
 		return cls._html_form.format(inputs=''.join(inputs))
 	
 	def _write(self, text):
@@ -271,6 +290,7 @@ class Handler(BaseHTTPRequestHandler):
 		cls.set_updated(True)
 		post = self._parse_POST()
 		for (name, (object_, type_)) in sorted(cls.registry.items()):
+			# TODO: implement this in the Type_* classes
 			if type_ in (int, long, float, str, unicode, tuple, list, dict):
 				if type_ is dict:
 					post_keys = '{0}_keys'.format(name)
@@ -456,7 +476,7 @@ class Server():
 		'''
 		if type_ is None:
 			type_ = type(object_)
-		if type_ not in self.request_handler.supported_types:
+		if type_ not in self.request_handler.supported_types.keys():
 			raise NotImplementedError(self.request_handler._type_not_implemented_msg.format(type_))
 		self.registry[name] = (object_, type_)
 	
@@ -504,7 +524,7 @@ def test():
 	http_control_server.register('running', running)
 	http_control_server.register('msg', msg)
 	if __debug__http_control__:
-		for type_ in http_control_server.request_handler.supported_types:
+		for type_ in http_control_server.request_handler.supported_types.keys():
 			http_control_server.register(str(type_), type_())
 	try:
 		while running:
