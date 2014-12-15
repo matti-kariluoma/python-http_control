@@ -55,14 +55,14 @@ def info(*objs):
 
 class Handler(BaseHTTPRequestHandler):
 	_messages = {}
-	supported_types = (bool, int, long, float, str, unicode, tuple, list, dict)
-	_escapes = (
-			('&', '&apos;'), # '&'  must be first item in this tuple
+	supported_types = [bool, int, long, float, str, unicode, tuple, list, dict]
+	_escapes = [
+			('&', '&apos;'), # '&'  must be first item in this list
 			('<', '&lt;'),
 			('>', '&gt;'),
 			('"', '&quot;'),
 			('\'', '&apos;'),
-		)
+		]
 	_type_not_implemented_msg = '''
  {0} not supported.
  You will need to manually convert it to and from one of: 
