@@ -109,7 +109,11 @@ class Type_list(Type):
 		self.input = '''	<textarea name='{name}' rows='5'>{value}</textarea>
 '''
 	def format(self, name, object_):
-		return '\n'.join([unicode(item) for item in object_])
+		val = '\n'.join([unicode(item) for item in object_])
+		return (
+				self.label.format(name=name, value=val),
+				self.input.format(name=name, value=val)
+			)
 
 class Type_dict(Type):
 	def __init__(self):
@@ -342,9 +346,13 @@ class _httpd_Thread(threading.Thread):
 		self.httpd = HTTPServer((host, port), handler)
 		
 	def run(self):
-		while self.running:
-			self.httpd.handle_request()
-		self.httpd.socket.close()
+		try:
+			while self.running:
+				self.httpd.handle_request()
+		except:
+			raise
+		finally:
+			self.httpd.socket.close()
 
 class Server():
 	def __init__(
@@ -428,8 +436,8 @@ class Server():
 		'''
 		self.request_handler._set_state(self.registry) # pass reference
 		self.request_handler._last_contacted(datetime.datetime.now())
-		self.httpd = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
-		self.httpd.start()
+		self.httpdt = _httpd_Thread(host=self.host, port=self.port, handler=self.request_handler)
+		self.httpdt.start()
 		if not zeroconf or self.zeroconf_disabled:
 			info('python-zeroconf not found, or disabled! Unable to configure network autodiscovery.')
 			self.zeroconf = None
@@ -448,7 +456,7 @@ class Server():
 				debug(e)
 	
 	def stop(self):
-		self.httpd.running = False
+		self.httpdt.running = False
 		# trigger handle_request()
 		try:
 			connection = HTTPConnection('127.0.0.1', self.port, timeout=1)
@@ -456,7 +464,7 @@ class Server():
 			_ = connection.getresponse()
 		except:
 			pass
-		self.httpd = None
+		self.httpdt = None
 		if not self.zeroconf_disabled and self.zeroconf:
 			try:
 				self.zeroconf.unregisterService(self.service_info)
@@ -467,7 +475,7 @@ class Server():
 	
 	def register(self, name, object_, type_=None):
 		'''
-		register a state variable with this server.
+		Register a state variable with this server.
 		
 		name : the handle of the object, used for later .get() calls
 		object_ : the python object you want to remotely control
@@ -488,14 +496,11 @@ class Server():
 	
 	def get(self, name):
 		'''
-		Fetches the (possibly updated) value of 'name', registers it, then 
-		returns the value.
+		Fetches the (possibly updated) value of 'name'
 		'''
 		self.request_handler._last_contacted(datetime.datetime.now())
 		if name in self.registry:
 			(object_, type_) = self.registry[name]
-			if object_ is not None:
-				self.register(name, object_, type_)
 			return object_
 		else:
 			self.warning('''{name} isn't registered! Returning None.'''.format(name=name))
